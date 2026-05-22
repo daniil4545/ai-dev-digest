@@ -1,4 +1,4 @@
-from src.digest import build_digest, format_digest_message
+from src.digest import _shorten, build_digest, format_digest_message
 from src.models import NewsItem
 
 
@@ -22,6 +22,34 @@ def _make_item(
     )
 
 
+class TestShorten:
+    def test_shorten_empty(self) -> None:
+        assert _shorten("") == ""
+
+    def test_shorten_short_text(self) -> None:
+        assert _shorten("Short text.") == "Short text."
+
+    def test_shorten_two_sentences(self) -> None:
+        text = "First sentence. Second sentence. Third sentence."
+        assert _shorten(text) == "First sentence. Second sentence."
+
+    def test_shorten_max_chars(self) -> None:
+        text = "A" * 180
+        result = _shorten(text, max_chars=100)
+        assert len(result) <= 100
+        assert result.endswith("...")
+
+    def test_shorten_very_long_summary(self) -> None:
+        text = (
+            "This is extremely significant for developers. "
+            "It demonstrates a fundamental shift in how things work. "
+            "The implications are huge for AI coding tools."
+        )
+        result = _shorten(text)
+        assert "fundamental shift" in result
+        assert "implications" not in result
+
+
 class TestBuildDigest:
     def test_build_digest_basic(self) -> None:
         items = [
@@ -37,6 +65,7 @@ class TestBuildDigest:
         assert "1. GPT-5" in result
         assert "2. Codex CLI v2" in result
         assert "3. Trending repo" in result
+        assert "🔗 https://example.com" in result
 
     def test_build_digest_sorted_by_score(self) -> None:
         items = [

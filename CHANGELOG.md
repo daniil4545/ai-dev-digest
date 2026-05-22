@@ -3,29 +3,26 @@
 ## [Unreleased]
 
 ### Added
-- Project scaffold: src/, tests/, data/ directories, requirements.txt, .env.example
-- Python venv with all dependencies including ruff
-- .gitignore for venv and env files
-- Git repository initialized
-- `src/models.py` — NewsItem dataclass with 8 fields
-- `src/config.py` — Config dataclass with env loading via python-dotenv and cached singleton
-- `src/storage.py` — SQLite storage with news_items, digest_runs, sent_links tables
-- `tests/test_storage.py` — 6 tests covering CRUD, duplicate detection, link tracking
-- `src/sources.py` — 9 source configs (RSS, HN API, Reddit API, GitHub Trending)
-- `src/collect.py` — 4 parsers with FETCH_MAP dispatcher and error handling
-- `tests/test_collect.py` — 20 tests covering all parsers, error cases, and collect_all
-- `src/llm.py` — LLM scoring via Ollama with heuristic fallback, batch and sequential modes
-- `tests/test_llm.py` — 13 tests covering LLM, heuristic, batch, and error handling
-- `src/digest.py` — digest builder with score sorting, category grouping, Telegram formatting
-- `tests/test_digest.py` — 7 tests covering sorting, grouping, empty, sequential index
-- `src/telegram.py` — Telegram bot with /digest, /health, /sources, /start commands
-- `tests/test_telegram.py` — 10 tests with mocked Telegram API
-- `src/scheduler.py` — APScheduler daily job at configurable time
-- `src/main.py` — application entry point
-- `tests/test_scheduler.py` — 4 tests for scheduler setup and job execution
+- `MAX_ITEMS_PER_SOURCE` limit (50) to prevent massive single-source collection
+- `_filter_recent(items, hours)` — filters items older than N hours before scoring
+- `debug_scoop` mode — collects 1 item per source when `DEBUG_SCOOP=1` (fast testing)
+- `_extract_json` with multi-strategy parsing (code fences, curly-brace, trailing commas, single quotes)
+- `_clean_json_string` — sanitizes trailing commas, Python booleans, single quotes in JSON
+- `_shorten(text, max_chars=150)` — truncates summaries to 1-2 sentences
+- `_clean_title` — strips newlines and extra whitespace from titles
+- Duplicate link filtering in `send_digest` via `storage.was_link_sent`
+- `httpx` logger set to WARNING to suppress Telegram polling spam
+- Config options: `DEBUG_SCOOP`, `MAX_ITEM_HOURS`
 
 ### Changed
-- LLM provider switched from OpenAI to Ollama (gemma3:4b) for news scoring
+- `score_news` / `score_news_batch` — two-pass scoring: heuristic first, LLM only for non-matching items
+- LLM prompt always requests Russian summary (`summary` field) instead of English `why_it_matters` + `action`
+- `_heuristic_score` — summary now comes from source data (`item.summary` or `item.title`)
+- Digest format: `1. Title\n   Summary (150 chars)\n   🔗 url` (removed Markdown link syntax)
+- Scheduler startup moved to `post_init` callback (fixes `RuntimeError: no running event loop`)
 
-### Removed
-- OpenAI and Anthropic API keys from env template
+### Fixed
+- JSON parsing for Ollama responses wrapped in ```json code blocks with trailing commas or single quotes
+- `RuntimeError: no running event loop` on `AsyncIOScheduler.start()` (moved to async post_init)
+- `test_collect_all` making real network requests (added `clear=True` to `mocker.patch.dict`)
+- Hardcoded source count in tests replaced with dynamic `len(SOURCES)`

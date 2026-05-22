@@ -14,6 +14,8 @@ class Config:
     ollama_host: str = "http://localhost:11434"
     digest_time: str = "08:30"
     timezone: str = "Europe/Amsterdam"
+    debug_scoop: bool = False
+    max_item_hours: int = 24
 
 
 def _get_env(key: str, default: str | None = None) -> str:
@@ -54,6 +56,8 @@ def load_config() -> Config:
         ollama_host=_get_env("OLLAMA_HOST", "http://localhost:11434"),
         digest_time=_get_env("DIGEST_TIME", "08:30"),
         timezone=_get_env("TIMEZONE", "Europe/Amsterdam"),
+        debug_scoop=_get_env("DEBUG_SCOOP", "0") in ("1", "true", "yes"),
+        max_item_hours=int(_get_env("MAX_ITEM_HOURS", "24")),
     )
 
 

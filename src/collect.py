@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, List
 
 import feedparser
@@ -12,6 +12,7 @@ from src.sources import SOURCES
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 15
+MAX_ITEMS_PER_SOURCE = 50
 
 
 def _parse_date(date_tuple: Any) -> str:
@@ -28,6 +29,23 @@ def _truncate(text: str, max_len: int = 500) -> str:
     if len(text) <= max_len:
         return text
     return text[:max_len].rsplit(" ", 1)[0] + "..."
+
+
+def _filter_recent(items: List[NewsItem], hours: int = 24) -> List[NewsItem]:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    filtered = []
+    for item in items:
+        try:
+            published = datetime.fromisoformat(item.published_at)
+            if published.tzinfo is None:
+                published = published.replace(tzinfo=timezone.utc)
+            if published >= cutoff:
+                filtered.append(item)
+        except (ValueError, TypeError):
+            filtered.append(item)
+    if filtered:
+        logger.info("Time filter: %d / %d items are newer than %d hours", len(filtered), len(items), hours)
+    return filtered
 
 
 def fetch_rss(url: str) -> List[NewsItem]:
@@ -199,7 +217,7 @@ FETCH_MAP: dict[str, Callable[..., List[NewsItem]]] = {
 }
 
 
-def collect_all() -> List[NewsItem]:
+def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> List[NewsItem]:
     all_items: List[NewsItem] = []
     for source in SOURCES:
         fetcher = FETCH_MAP.get(source.type)
@@ -211,12 +229,21 @@ def collect_all() -> List[NewsItem]:
                 items = fetcher()
             else:
                 items = fetcher(source.url)
+
+            limit = 1 if debug_scoop else MAX_ITEMS_PER_SOURCE
+            items = items[:limit]
             for item in items:
                 item.source = source.name
-            logger.info("Collected %d items from %s", len(items), source.name)
+            logger.info(
+                "Collected %d items from %s%s",
+                len(items), source.name,
+                " (debug scoop)" if debug_scoop else "",
+            )
             all_items.extend(items)
         except requests.RequestException as e:
             logger.warning("Failed to fetch %s: %s", source.name, e)
         except Exception as e:
             logger.warning("Unexpected error fetching %s: %s", source.name, e)
+
+    all_items = _filter_recent(all_items, hours=max_item_hours)
     return all_items

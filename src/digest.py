@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List
 
 from src.models import NewsItem
@@ -29,6 +30,20 @@ def _get_category(source: str) -> str:
     return _source_to_category.get(source, "other")
 
 
+def _clean_title(title: str) -> str:
+    return " ".join(title.replace("\n", " ").split())
+
+
+def _shorten(text: str, max_sentences: int = 2, max_chars: int = 150) -> str:
+    if not text:
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    short = " ".join(sentences[:max_sentences])
+    if len(short) > max_chars:
+        short = short[: max_chars - 3].rsplit(" ", 1)[0] + "..."
+    return short
+
+
 def build_digest(items: List[NewsItem]) -> str:
     if not items:
         return ""
@@ -54,9 +69,12 @@ def build_digest(items: List[NewsItem]) -> str:
 
         for item in group:
             index += 1
-            lines.append(f"{index}. {item.title}")
-            lines.append(f"   {item.why_it_matters}")
-            lines.append(f"   → {item.action}: {item.url}")
+            title = _clean_title(item.title)
+            summary = _shorten(item.why_it_matters)
+            lines.append(f"{index}. {title}")
+            if summary:
+                lines.append(f"   {summary}")
+            lines.append(f"   🔗 {item.url}")
             lines.append("")
 
     return "\n".join(lines).strip()

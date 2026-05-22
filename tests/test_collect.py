@@ -1,8 +1,10 @@
 import time
+from datetime import datetime, timezone
 
 import requests
 
 from src.collect import (
+    _filter_recent,
     _parse_date,
     _truncate,
     collect_all,
@@ -32,6 +34,46 @@ class TestHelpers:
     def test_parse_date_valid(self) -> None:
         result = _parse_date((2025, 6, 1, 12, 0, 0, 6, 152, 0))
         assert result == "2025-06-01T12:00:00+00:00"
+
+
+class TestFilterRecent:
+    def _item(self, published_at: str) -> NewsItem:
+        return NewsItem(
+            title="Test",
+            url="https://example.com",
+            source="test",
+            published_at=published_at,
+            summary="",
+        )
+
+    def test_recent_item_passes(self) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        items = [self._item(now)]
+        result = _filter_recent(items, hours=24)
+        assert len(result) == 1
+
+    def test_old_item_filtered(self) -> None:
+        items = [self._item("2024-01-01T00:00:00+00:00")]
+        result = _filter_recent(items, hours=24)
+        assert len(result) == 0
+
+    def test_mixed_items(self) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        items = [
+            self._item("2024-01-01T00:00:00+00:00"),
+            self._item(now),
+        ]
+        result = _filter_recent(items, hours=24)
+        assert len(result) == 1
+
+    def test_invalid_date_passes(self) -> None:
+        items = [self._item("not-a-date")]
+        result = _filter_recent(items, hours=24)
+        assert len(result) == 1
+
+    def test_empty_list(self) -> None:
+        result = _filter_recent([], hours=24)
+        assert result == []
 
 
 class TestFetchRSS:
@@ -315,7 +357,9 @@ class TestCollectAll:
                 "reddit_api": mock_fetch_reddit,
                 "github_trending": mock_fetch_gh,
             },
+            clear=True,
         )
+        mocker.patch("src.collect._filter_recent", side_effect=lambda x, **kw: x)
 
         items = collect_all()
 
@@ -331,6 +375,23 @@ class TestCollectAll:
 
         assert len(items) == rss_source_count + hn_source_count
         for item in items:
+            assert item.source != ""
+
+    def test_collect_all_debug_scoop(self, mocker) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        items_multi = [
+            NewsItem(title=f"Item {i}", url=f"https://example.com/{i}", source="", published_at=now, summary="")
+            for i in range(5)
+        ]
+
+        mock_fetch = mocker.Mock(return_value=list(items_multi))
+        mocker.patch.dict("src.collect.FETCH_MAP", {"rss": mock_fetch}, clear=True)
+        mocker.patch("src.collect._filter_recent", side_effect=lambda x, **kw: x)
+
+        result = collect_all(debug_scoop=True)
+        rss_count = sum(1 for s in SOURCES if s.type == "rss")
+        assert len(result) == rss_count
+        for item in result:
             assert item.source != ""
 
 

@@ -73,7 +73,7 @@ class TestHealthCommand:
         assert "System status" in reply
         assert "Config: OK" in reply
         assert "Database: OK" in reply
-        assert "9 configured" in reply
+        assert f"{len(SOURCES)} configured" in reply
 
     def test_health_command_config_fails(self, mocker) -> None:
         mocker.patch("src.telegram.get_config", side_effect=ValueError("no token"))
@@ -86,7 +86,7 @@ class TestHealthCommand:
         reply = update.message.reply_text.await_args[0][0]
         assert "System status" in reply
         assert "Config: FAIL" in reply
-        assert "Sources: 9 configured" in reply
+        assert f"Sources: {len(SOURCES)} configured" in reply
 
 
 class TestSourcesCommand:
@@ -117,6 +117,7 @@ class TestDigestCommand:
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
         mocker.patch("src.telegram.Storage")
+        mocker.patch("src.telegram.Storage").return_value.was_link_sent.return_value = False
         mock_format = mocker.patch(
             "src.telegram.format_digest_message",
             return_value="*Digest content*",
@@ -171,7 +172,8 @@ class TestSendDigest:
         items = [_fake_item(title="GPT-5", score=5.0)]
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
-        mocker.patch("src.telegram.Storage")
+        mock_storage = mocker.patch("src.telegram.Storage")
+        mock_storage.return_value.was_link_sent.return_value = False
         mocker.patch(
             "src.telegram.format_digest_message",
             return_value="*Digest*",

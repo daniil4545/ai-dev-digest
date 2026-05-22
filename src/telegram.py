@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import List
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -9,6 +10,7 @@ from src.collect import collect_all
 from src.config import get_config
 from src.digest import format_digest_message
 from src.llm import score_news
+from src.models import NewsItem
 from src.sources import SOURCES
 from src.storage import Storage
 
@@ -78,8 +80,14 @@ async def sources_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def send_digest(app: Application, chat_id: int) -> None:
+    config = get_config()
+
     try:
-        items = await asyncio.to_thread(collect_all)
+        items = await asyncio.to_thread(
+            collect_all,
+            debug_scoop=config.debug_scoop,
+            max_item_hours=config.max_item_hours,
+        )
         logger.info("Collected %d items", len(items))
     except Exception as e:
         logger.error("Failed to collect news: %s", e)
@@ -101,6 +109,23 @@ async def send_digest(app: Application, chat_id: int) -> None:
         storage.save_run(len(scored), "success" if scored else "empty")
     except Exception as e:
         logger.error("Failed to store results: %s", e)
+    finally:
+        storage.close()
+
+    storage = Storage(_DB_PATH)
+    try:
+        seen: List[NewsItem] = []
+        skipped = 0
+        for item in scored:
+            if storage.was_link_sent(item.url):
+                skipped += 1
+            else:
+                seen.append(item)
+        if skipped:
+            logger.info("Dropped %d already-sent links", skipped)
+        scored = seen
+    except Exception as e:
+        logger.error("Failed to check duplicates: %s", e)
     finally:
         storage.close()
 
@@ -126,9 +151,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error("Unhandled error: %s", context.error)
 
 
-def setup_application() -> Application:
+def setup_application(post_init=None) -> Application:
     config = get_config()
-    app = Application.builder().token(config.telegram_bot_token).build()
+    builder = Application.builder().token(config.telegram_bot_token)
+    if post_init:
+        builder = builder.post_init(post_init)
+    app = builder.build()
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("digest", digest_handler))
     app.add_handler(CommandHandler("health", health_handler))
