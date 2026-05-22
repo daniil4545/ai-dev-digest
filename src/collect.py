@@ -32,12 +32,18 @@ def _truncate(text: str, max_len: int = 500) -> str:
 
 def fetch_rss(url: str) -> List[NewsItem]:
     try:
-        feed = feedparser.parse(url)
+        headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        feed = feedparser.parse(response.text)
         if feed.bozo and not feed.entries:
             logger.warning("Failed to parse RSS feed %s: %s", url, feed.bozo_exception)
             return []
-    except Exception as e:
+    except requests.RequestException as e:
         logger.warning("Failed to fetch RSS feed %s: %s", url, e)
+        return []
+    except Exception as e:
+        logger.warning("Failed to parse RSS feed %s: %s", url, e)
         return []
 
     items: List[NewsItem] = []

@@ -36,6 +36,8 @@ class TestHelpers:
 
 class TestFetchRSS:
     def test_fetch_rss(self, mocker) -> None:
+        mock_get = mocker.patch("src.collect.requests.get")
+        mock_get.return_value.text = "<rss><channel><item><title>dummy</title></item></channel></rss>"
         mock_parse = mocker.patch("src.collect.feedparser.parse")
 
         class MockEntry:
@@ -59,6 +61,8 @@ class TestFetchRSS:
         assert items[0].summary == "Article summary text"
 
     def test_fetch_rss_no_date(self, mocker) -> None:
+        mock_get = mocker.patch("src.collect.requests.get")
+        mock_get.return_value.text = "<rss><channel><item><title>dummy</title></item></channel></rss>"
         mock_parse = mocker.patch("src.collect.feedparser.parse")
 
         class MockEntry:

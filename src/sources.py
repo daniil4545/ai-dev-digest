@@ -18,7 +18,31 @@ SOURCES: list[SourceConfig] = [
     ),
     SourceConfig(
         name="Anthropic Blog",
-        url="https://www.anthropic.com/rss.xml",
+        url="https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml",
+        type="rss",
+        category="ai-news",
+    ),
+    SourceConfig(
+        name="Cursor Blog",
+        url="https://raw.githubusercontent.com/leontloveless/ai-rss-feeds/main/feeds/cursor-blog.xml",
+        type="rss",
+        category="tools",
+    ),
+    SourceConfig(
+        name="Google DeepMind",
+        url="https://raw.githubusercontent.com/leontloveless/ai-rss-feeds/main/feeds/deepmind-blog.xml",
+        type="rss",
+        category="ai-news",
+    ),
+    SourceConfig(
+        name="Groq News",
+        url="https://raw.githubusercontent.com/leontloveless/ai-rss-feeds/main/feeds/groq-news.xml",
+        type="rss",
+        category="ai-news",
+    ),
+    SourceConfig(
+        name="Stability AI",
+        url="https://raw.githubusercontent.com/leontloveless/ai-rss-feeds/main/feeds/stability-ai.xml",
         type="rss",
         category="ai-news",
     ),
