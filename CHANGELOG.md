@@ -16,6 +16,8 @@
 - `tests/test_collect.py` — 20 tests covering all parsers, error cases, and collect_all
 - `src/llm.py` — LLM scoring via Ollama with heuristic fallback, batch and sequential modes
 - `tests/test_llm.py` — 13 tests covering LLM, heuristic, batch, and error handling
+- `src/digest.py` — digest builder with score sorting, category grouping, Telegram formatting
+- `tests/test_digest.py` — 7 tests covering sorting, grouping, empty, sequential index
 
 ### Changed
 - LLM provider switched from OpenAI to Ollama (gemma3:4b) for news scoring

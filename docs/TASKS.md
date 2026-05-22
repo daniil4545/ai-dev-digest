@@ -25,11 +25,11 @@
       фильтр `score >= 3`.
       Проверка: `pytest tests/test_llm.py` с mock ollama.
 
-- [~] **M4: Digest**
+- [x] **M4: Digest**
       `digest.py` — сортировка по score, группировка по темам, форматирование в Telegram-разметку.
       Проверка: `pytest tests/test_digest.py` — на вход набор NewsItem, на выход строка с ожидаемой структурой.
 
-- [ ] **M5: Telegram Commands**
+- [~] **M5: Telegram Commands**
       `telegram.py` — `Application` из `python-telegram-bot`, команды `/digest` (запустить сбор и отправить),
       `/health` (проверка БД + API ключей), `/sources` (список источников).
       Проверка: запустить `python src/main.py`, отправить команды в Telegram.

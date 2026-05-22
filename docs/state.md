@@ -1,3 +1,3 @@
-Текущий milestone: M3 — LLM Scoring.
-Сделано: Ollama client для оценки новостей, эвристический fallback по ключевым словам, batch/sequential режимы.
-Следующий шаг: M4 — Digest (digest.py, сортировка, группировка, Telegram-разметка).
+Текущий milestone: M4 — Digest.
+Сделано: сортировка по score, группировка по категориям, Telegram-формат дайджеста.
+Следующий шаг: M5 — Telegram Commands (telegram.py, /digest, /health, /sources).
