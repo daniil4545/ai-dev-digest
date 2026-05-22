@@ -117,16 +117,16 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
     for child in data.get("data", {}).get("children", []):
         post = child.get("data", {})
         title = str(post.get("title", ""))
-        url = str(post.get("url", ""))
-        if not url or url.startswith("https://www.reddit.com/r/"):
-            url = f"https://www.reddit.com{post.get('permalink', '')}"
+        post_url = str(post.get("url", ""))
+        if not post_url or post_url.startswith("https://www.reddit.com/r/"):
+            post_url = f"https://www.reddit.com{post.get('permalink', '')}"
         score = float(post.get("score", 0))
         created = post.get("created_utc", 0)
         published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
         items.append(
             NewsItem(
                 title=title,
-                url=url,
+                url=post_url,
                 source="",
                 published_at=published_at,
                 summary=_truncate(post.get("selftext", title)),
@@ -138,7 +138,8 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
 
 def fetch_github_trending(url: str) -> List[NewsItem]:
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
+        headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
     except requests.RequestException as e:
         logger.warning("Failed to fetch GitHub trending: %s", e)

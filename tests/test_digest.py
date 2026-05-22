@@ -83,7 +83,7 @@ class TestFormatDigestMessage:
         result = format_digest_message(items)
 
         assert result.startswith("*🤖 AI Dev Digest*")
-        assert result.endswith("--- ")
+        assert result.endswith("---")
         assert "🔥 Main Updates" in result
         assert "1. GPT-5" in result
 

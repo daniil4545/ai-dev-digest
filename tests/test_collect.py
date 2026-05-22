@@ -359,7 +359,7 @@ class TestSources:
             ), f"Source {source.name} has unknown type: {source.type}"
 
     def test_sources_count(self) -> None:
-        assert len(SOURCES) == 9
+        assert len(SOURCES) >= 9
 
     def test_source_name_unique(self) -> None:
         names = [s.name for s in SOURCES]

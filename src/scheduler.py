@@ -14,7 +14,13 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
     config = get_config()
     hour, minute = map(int, config.digest_time.split(":"))
     tz = ZoneInfo(config.timezone)
-    chat_id = int(config.telegram_chat_id)
+    try:
+        chat_id = int(config.telegram_chat_id)
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Invalid TELEGRAM_CHAT_ID: {config.telegram_chat_id!r}. "
+            "Must be a numeric string."
+        ) from e
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(

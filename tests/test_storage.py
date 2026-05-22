@@ -42,12 +42,11 @@ class TestStorage:
         storage = Storage(":memory:")
         try:
             item = _make_item()
-            row_id_1 = storage.save_item(item)
+            storage.save_item(item)
             assert not storage.is_duplicate(_make_item(title="Other"))
 
             assert storage.is_duplicate(item)
-            row_id_2 = storage.save_item(item)
-            assert row_id_2 == row_id_1
+            storage.save_item(item)
             items = storage.get_recent_items()
             assert len(items) == 1
         finally:

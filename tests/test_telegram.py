@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+from src.config import Config
 from src.models import NewsItem
 from src.sources import SOURCES
 from src.telegram import (
@@ -55,21 +56,35 @@ class TestStartCommand:
 
 class TestHealthCommand:
     def test_health_command(self, mocker) -> None:
-        mocker.patch("src.telegram.get_config", return_value=MagicMock())
+        mocker.patch(
+            "src.telegram.get_config",
+            return_value=Config(
+                telegram_bot_token="test",
+                telegram_chat_id="12345",
+                ollama_model="gemma3:4b",
+                ollama_host="http://localhost:11434",
+                digest_time="08:30",
+                timezone="Europe/Amsterdam",
+            ),
+        )
         update, context = _make_update_and_context()
         _run(health_handler, update, context)
         reply = update.message.reply_text.await_args[0][0]
-        assert "All systems operational" in reply
+        assert "System status" in reply
         assert "Config: OK" in reply
         assert "Database: OK" in reply
         assert "9 configured" in reply
 
     def test_health_command_config_fails(self, mocker) -> None:
         mocker.patch("src.telegram.get_config", side_effect=ValueError("no token"))
+        mocker.patch(
+            "src.telegram.Storage",
+            return_value=MagicMock(),
+        )
         update, context = _make_update_and_context()
         _run(health_handler, update, context)
         reply = update.message.reply_text.await_args[0][0]
-        assert "All systems operational" in reply
+        assert "System status" in reply
         assert "Config: FAIL" in reply
         assert "Sources: 9 configured" in reply
 
@@ -88,6 +103,7 @@ class TestDigestCommand:
     def test_digest_command_empty(self, mocker) -> None:
         mocker.patch("src.telegram.collect_all", return_value=[])
         mocker.patch("src.telegram.score_news", return_value=[])
+        mocker.patch("src.telegram.Storage")
         update, context = _make_update_and_context()
         _run(digest_handler, update, context)
         update.message.reply_text.assert_awaited_with("⏳ Collecting news...")
@@ -100,6 +116,7 @@ class TestDigestCommand:
         items = [_fake_item(title="Claude update", score=4.0)]
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
+        mocker.patch("src.telegram.Storage")
         mock_format = mocker.patch(
             "src.telegram.format_digest_message",
             return_value="*Digest content*",
@@ -116,7 +133,9 @@ class TestDigestCommand:
 
 class TestSendDigest:
     def test_send_digest_collect_fails(self, mocker) -> None:
-        mocker.patch("src.telegram.collect_all", side_effect=RuntimeError("network down"))
+        mocker.patch(
+            "src.telegram.collect_all", side_effect=RuntimeError("network down")
+        )
         app = MagicMock()
         app.bot.send_message = AsyncMock()
         _run(send_digest, app, 12345)
@@ -139,6 +158,7 @@ class TestSendDigest:
     def test_send_digest_empty(self, mocker) -> None:
         mocker.patch("src.telegram.collect_all", return_value=[])
         mocker.patch("src.telegram.score_news", return_value=[])
+        mocker.patch("src.telegram.Storage")
         app = MagicMock()
         app.bot.send_message = AsyncMock()
         _run(send_digest, app, 12345)
@@ -151,6 +171,7 @@ class TestSendDigest:
         items = [_fake_item(title="GPT-5", score=5.0)]
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
+        mocker.patch("src.telegram.Storage")
         mocker.patch(
             "src.telegram.format_digest_message",
             return_value="*Digest*",

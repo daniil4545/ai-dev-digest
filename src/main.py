@@ -1,4 +1,6 @@
 import logging
+import signal
+import sys
 
 from src.config import get_config
 from src.scheduler import setup_scheduler, start_scheduler
@@ -18,7 +20,17 @@ def main() -> None:
     scheduler = setup_scheduler(app)
     start_scheduler(scheduler)
 
-    logger.info("Bot started. Daily digest at %s (%s)", config.digest_time, config.timezone)
+    def shutdown(signum, frame):
+        logger.info("Shutting down...")
+        scheduler.shutdown(wait=False)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    logger.info(
+        "Bot started. Daily digest at %s (%s)", config.digest_time, config.timezone
+    )
     run_polling(app)
 
 

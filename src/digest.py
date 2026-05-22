@@ -67,4 +67,4 @@ def format_digest_message(items: List[NewsItem]) -> str:
     if not body:
         return ""
 
-    return f"*🤖 AI Dev Digest*\n{body}\n\n--- "
+    return f"*🤖 AI Dev Digest*\n{body}\n\n---"

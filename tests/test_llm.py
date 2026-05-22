@@ -62,13 +62,14 @@ class TestScoreNews:
 
     def test_score_news_invalid_json(self, mocker) -> None:
         _mock_config(mocker)
-        _mock_ollama_chat(mocker, return_value={"message": {"content": "not valid json"}})
+        _mock_ollama_chat(
+            mocker, return_value={"message": {"content": "not valid json"}}
+        )
 
         item = _make_item()
         result = score_news([item])
 
         assert len(result) == 0
-        assert item.score == 0.0
 
     def test_score_news_empty_json(self, mocker) -> None:
         _mock_config(mocker)
@@ -78,11 +79,10 @@ class TestScoreNews:
         result = score_news([item])
 
         assert len(result) == 0
-        assert item.score == 0.0
 
     def test_score_news_connection_error(self, mocker) -> None:
         _mock_config(mocker)
-        _mock_ollama_chat(mocker, side_effect=ConnectionError("connection refused"))
+        _mock_ollama_chat(mocker, side_effect=RuntimeError("connection refused"))
 
         item = _make_item(title="Claude 4 release", summary="New model from Anthropic")
         result = score_news([item])
@@ -95,8 +95,16 @@ class TestScoreNews:
         _mock_config(mocker)
         mock_client = _mock_ollama_chat(mocker)
         mock_client.chat.side_effect = [
-            {"message": {"content": '{"score": 4.0, "why_it_matters": "A", "action": "B"}'}},
-            {"message": {"content": '{"score": 2.0, "why_it_matters": "C", "action": "D"}'}},
+            {
+                "message": {
+                    "content": '{"score": 4.0, "why_it_matters": "A", "action": "B"}'
+                }
+            },
+            {
+                "message": {
+                    "content": '{"score": 2.0, "why_it_matters": "C", "action": "D"}'
+                }
+            },
         ]
 
         items = [

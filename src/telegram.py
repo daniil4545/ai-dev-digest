@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -13,9 +14,12 @@ from src.storage import Storage
 
 logger = logging.getLogger(__name__)
 
+_DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "digest.db")
+
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    assert update.message is not None
+    if update.message is None:
+        return
     await update.message.reply_text(
         "🤖 AI Dev Digest Bot\n\n"
         "Каждое утро собираю свежие новости из мира AI и разработки.\n"
@@ -27,7 +31,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def health_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    assert update.message is not None
+    if update.message is None:
+        return
     config_ok = False
     db_ok = False
     try:
@@ -36,14 +41,20 @@ async def health_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception:
         pass
     try:
-        storage = Storage(":memory:")
+        storage = Storage(_DB_PATH)
         storage.save_run(0, "health")
         storage.close()
         db_ok = True
     except Exception:
         pass
 
-    lines = ["✅ All systems operational"]
+    if config_ok and db_ok:
+        status = "✅"
+    elif config_ok or db_ok:
+        status = "⚠️"
+    else:
+        status = "❌"
+    lines = [f"{status} System status"]
     lines.append(f"• Config: {'OK' if config_ok else 'FAIL'}")
     lines.append(f"• Database: {'OK' if db_ok else 'FAIL'}")
     lines.append(f"• Sources: {len(SOURCES)} configured")
@@ -51,7 +62,8 @@ async def health_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def sources_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    assert update.message is not None
+    if update.message is None:
+        return
     type_labels = {
         "rss": "RSS",
         "hn_api": "API",
@@ -82,6 +94,16 @@ async def send_digest(app: Application, chat_id: int) -> None:
         await app.bot.send_message(chat_id=chat_id, text="Failed to score news")
         return
 
+    storage = Storage(_DB_PATH)
+    try:
+        for item in items:
+            storage.save_item(item)
+        storage.save_run(len(scored), "success" if scored else "empty")
+    except Exception as e:
+        logger.error("Failed to store results: %s", e)
+    finally:
+        storage.close()
+
     if not scored:
         await app.bot.send_message(
             chat_id=chat_id, text="No news worth reporting today."
@@ -93,11 +115,15 @@ async def send_digest(app: Application, chat_id: int) -> None:
 
 
 async def digest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    assert update.message is not None
-    assert update.effective_chat is not None
+    if update.message is None or update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
     await update.message.reply_text("⏳ Collecting news...")
     await send_digest(context.application, chat_id)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Unhandled error: %s", context.error)
 
 
 def setup_application() -> Application:
@@ -107,6 +133,7 @@ def setup_application() -> Application:
     app.add_handler(CommandHandler("digest", digest_handler))
     app.add_handler(CommandHandler("health", health_handler))
     app.add_handler(CommandHandler("sources", sources_handler))
+    app.add_error_handler(error_handler)
     return app
 
 
