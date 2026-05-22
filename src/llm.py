@@ -6,7 +6,6 @@ from typing import Any, List
 import ollama
 
 from src.config import get_config
-from src.digest import _shorten
 from src.models import NewsItem
 
 logger = logging.getLogger(__name__)
@@ -31,28 +30,48 @@ def _build_prompt(item: NewsItem) -> str:
     text = f"{item.title} — {item.summary}"
     return (
         f"Оцени новость для разработчика, интересующегося AI coding tools.\n"
-        f"Верни JSON: {{\"score\": 0-5, \"summary\": \"краткое саммари новости (1-2 предложения, о чём статья)\"}}\n"
+        f'Верни JSON: {{"score": 0-5, "title": "короткий заголовок (2-5 слов, по-русски)", "summary": "краткое содержание на русском (до 100 слов, связный текст)"}}\n'
         f"Новость: {text}"
     )
 
 
-def _heuristic_score(item: NewsItem) -> NewsItem:
+def _shorten_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3].rsplit(" ", 1)[0] + "..."
+
+
+def _heuristic_fallback(item: NewsItem) -> NewsItem:
     text = f"{item.title} {item.summary}".lower()
-    matched = []
     for kw in KEYWORDS:
         if kw in text:
-            matched.append(kw)
-    if matched:
-        logger.info("Heuristic match for '%s': keywords %s", item.title, matched)
-        item.score = 3.0
-        item.why_it_matters = _shorten(item.summary or item.title)
-        item.action = ""
-        return item
-    logger.debug("No heuristic keywords in '%s'", item.title)
+            logger.info("Heuristic fallback for '%s': keyword %s", item.title, kw)
+            item.score = 3.0
+            item.title = _shorten_text(item.title, max_chars=80)
+            item.why_it_matters = _shorten_text(
+                item.summary or item.title, max_chars=300
+            )
+            return item
     item.score = 1.0
-    item.why_it_matters = ""
-    item.action = ""
     return item
+
+
+def _heuristic_score(item: NewsItem) -> NewsItem:
+    return _heuristic_fallback(item)
+
+
+def _clamp_score(value: Any) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(score, 5.0))
+
+
+def _apply_llm_result(item: NewsItem, data: dict) -> None:
+    item.score = _clamp_score(data.get("score", 0.0))
+    item.title = str(data.get("title", item.title))
+    item.why_it_matters = data.get("summary") or ""
 
 
 def _clean_json_string(s: str) -> str:
@@ -72,7 +91,9 @@ def _try_json_load(s: str, label: str) -> Any | None:
     except json.JSONDecodeError as e:
         logger.debug(
             "%s: JSON parse error at pos %d: %s",
-            label, e.pos, e.msg,
+            label,
+            e.pos,
+            e.msg,
         )
         return None
 
@@ -85,7 +106,9 @@ def _try_json_load_strict(s: str, label: str) -> Any | None:
         return obj
     except (json.JSONDecodeError, ValueError) as e:
         logger.debug(
-            "%s (strict=False): %s", label, e,
+            "%s (strict=False): %s",
+            label,
+            e,
         )
         return None
 
@@ -149,77 +172,57 @@ def _extract_json(content: str) -> Any:
                 logger.debug("Parsed via braces inside code fence")
                 return result
 
-            result = _try_json_load_strict(candidate_inner, "fence+braces (strict=False)")
+            result = _try_json_load_strict(
+                candidate_inner, "fence+braces (strict=False)"
+            )
             if result is not None:
                 return result
 
     logger.warning(
         "All JSON extraction attempts failed for content (%d chars). "
         "First 200 chars: %.200s",
-        len(content), content,
+        len(content),
+        content,
     )
     raise json.JSONDecodeError("Could not extract JSON", content, 0)
 
 
 def score_news(items: List[NewsItem]) -> List[NewsItem]:
     config = get_config()
-    client = ollama.Client(host=config.ollama_host)
-    logger.info("Scoring %d news items", len(items))
+    client = ollama.Client(host=config.ollama_host, timeout=REQUEST_TIMEOUT)
+    logger.info("Scoring %d news items (all go through LLM)", len(items))
 
     total = len(items)
     scored: List[NewsItem] = []
-    needs_llm: List[NewsItem] = []
-    needs_llm_idx: List[int] = []
 
     for idx, item in enumerate(items):
-        candidate = _heuristic_score(item)
-        if candidate.score >= 3.0:
-            logger.info("[%d/%d] Heuristic pass for '%s' (keywords)", idx + 1, total, item.title)
-            scored.append(candidate)
-        else:
-            needs_llm.append(item)
-            needs_llm_idx.append(idx)
-
-    if not needs_llm:
-        logger.info("All items passed heuristic, LLM not needed")
-        return scored
-
-    logger.info(
-        "Heuristic pass: %d passed, %d need LLM scoring",
-        len(scored), len(needs_llm),
-    )
-
-    for pos, (item, original_idx) in enumerate(zip(needs_llm, needs_llm_idx)):
         try:
             prompt = _build_prompt(item)
-            logger.debug(
-                "[LLM %d/%d] Sending: %s", pos + 1, len(needs_llm), item.title
-            )
             response = client.chat(
                 model=config.ollama_model,
                 messages=[{"role": "user", "content": prompt}],
-                options={"num_predict": 256},
+                options={"num_predict": 512},
             )
             content = response["message"]["content"]
             data = _extract_json(content)
-            item.score = float(data.get("score", 0.0))
-            item.why_it_matters = data.get("summary") or ""
-            item.action = ""
+            _apply_llm_result(item, data)
             logger.info(
-                "[LLM %d/%d] '%s' = %.1f | summary: %s",
-                pos + 1, len(needs_llm), item.title, item.score,
-                item.why_it_matters[:100] if item.why_it_matters else "(none)",
-            )
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            logger.warning(
-                "[LLM %d/%d] Failed to parse for '%s', heuristic=1.0 stays",
-                pos + 1, len(needs_llm), item.title,
+                "[%d/%d] '%s' = %.1f | summary: %s",
+                idx + 1,
+                total,
+                item.title,
+                item.score,
+                item.why_it_matters[:80] if item.why_it_matters else "(none)",
             )
         except Exception as e:
             logger.warning(
-                "[LLM %d/%d] Error for '%s': %s, heuristic=1.0 stays",
-                pos + 1, len(needs_llm), item.title, e,
+                "[%d/%d] LLM failed for '%s': %s, heuristic fallback",
+                idx + 1,
+                total,
+                item.title,
+                e,
             )
+            _heuristic_fallback(item)
 
         if item.score >= 3.0:
             scored.append(item)
@@ -230,37 +233,20 @@ def score_news(items: List[NewsItem]) -> List[NewsItem]:
 
 def score_news_batch(items: List[NewsItem]) -> List[NewsItem]:
     config = get_config()
-    client = ollama.Client(host=config.ollama_host)
+    client = ollama.Client(host=config.ollama_host, timeout=REQUEST_TIMEOUT)
     logger.info("Batch scoring %d news items", len(items))
 
     scored: List[NewsItem] = []
-    needs_llm: List[NewsItem] = []
-
-    for item in items:
-        candidate = _heuristic_score(item)
-        if candidate.score >= 3.0:
-            scored.append(candidate)
-        else:
-            needs_llm.append(item)
-
-    if not needs_llm:
-        logger.info("All items passed heuristic, LLM not needed")
-        return scored
-
-    logger.info(
-        "Heuristic pass: %d passed, %d need LLM batch scoring",
-        len(scored), len(needs_llm),
-    )
 
     try:
         batch_prompt = (
             "Rate these news for a developer interested in AI coding tools.\n"
-            'Return JSON array: [{"score": 0-5, "summary": "краткое саммари (1-2 предложения, о чём статья)"}, ...]\n\n'
+            'Return JSON array: [{"score": 0-5, "title": "короткий заголовок (2-5 слов, по-русски)", "summary": "краткое содержание на русском (до 100 слов, связный текст)"}, ...]\n\n'
         )
-        for i, item in enumerate(needs_llm):
+        for i, item in enumerate(items):
             batch_prompt += f"{i + 1}. {item.title} — {item.summary}\n"
 
-        logger.debug("Batch prompt (%d chars, %d items)", len(batch_prompt), len(needs_llm))
+        logger.debug("Batch prompt (%d chars, %d items)", len(batch_prompt), len(items))
         response = client.chat(
             model=config.ollama_model,
             messages=[{"role": "user", "content": batch_prompt}],
@@ -268,16 +254,16 @@ def score_news_batch(items: List[NewsItem]) -> List[NewsItem]:
         )
         content = response["message"]["content"]
         data = _extract_json(content)
-        if isinstance(data, list) and len(data) == len(needs_llm):
+        if isinstance(data, list) and len(data) == len(items):
             logger.debug("Batch response has %d items, applying scores", len(data))
-            for item, result in zip(needs_llm, data):
-                item.score = float(result.get("score", 0.0))
-                item.why_it_matters = result.get("summary") or ""
-                item.action = ""
+            for item, result in zip(items, data):
+                _apply_llm_result(item, result)
                 logger.info(
-                    "Batch scored '%s' = %.1f", item.title, item.score,
+                    "Batch scored '%s' = %.1f",
+                    item.title,
+                    item.score,
                 )
-            for item in needs_llm:
+            for item in items:
                 if item.score >= 3.0:
                     scored.append(item)
             logger.info(
@@ -286,30 +272,41 @@ def score_news_batch(items: List[NewsItem]) -> List[NewsItem]:
             return scored
         logger.warning(
             "Batch response format invalid: expected list of %d, got %s (type=%s)",
-            len(needs_llm), content[:200], type(data).__name__,
+            len(items),
+            content[:200],
+            type(data).__name__,
         )
     except Exception as e:
         logger.warning("Batch scoring failed: %s, falling back to sequential", e)
 
-    logger.info("Falling back to sequential LLM for %d items", len(needs_llm))
-    for item in needs_llm:
+    logger.info("Falling back to sequential LLM for %d items", len(items))
+    for idx, item in enumerate(items):
         try:
             prompt = _build_prompt(item)
             response = client.chat(
                 model=config.ollama_model,
                 messages=[{"role": "user", "content": prompt}],
-                options={"num_predict": 256},
+                options={"num_predict": 512},
             )
             content = response["message"]["content"]
             data = _extract_json(content)
-            item.score = float(data.get("score", 0.0))
-            item.why_it_matters = data.get("summary") or ""
-            item.action = ""
+            _apply_llm_result(item, data)
             logger.info(
-                "LLM scored '%s' = %.1f", item.title, item.score,
+                "[%d/%d] '%s' = %.1f",
+                idx + 1,
+                len(items),
+                item.title,
+                item.score,
             )
-        except Exception:
-            logger.debug("LLM failed for '%s', keeping heuristic=1.0", item.title)
+        except Exception as e:
+            logger.warning(
+                "[%d/%d] LLM failed for '%s': %s, heuristic fallback",
+                idx + 1,
+                len(items),
+                item.title,
+                e,
+            )
+            _heuristic_fallback(item)
 
         if item.score >= 3.0:
             scored.append(item)

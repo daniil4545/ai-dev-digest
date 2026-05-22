@@ -1,3 +1,3 @@
-Текущий milestone: M6 — Scheduler + Main.
-Сделано: JSON парсинг Ollama, докручен формат дайджеста (русское саммари, ссылки), фильтр по времени, дедупликация, debug scoop режим.
-Следующий шаг: M7 — edge case тесты (пустые источники, дубликаты, ошибки API).
+Текущий milestone: M8 — Information Quality Loop.
+Сделано: стабилизирован pipeline collect → score → storage → Telegram, добавлены smoke/e2e и edge-case тесты, исправлены дедупликация, Markdown escaping, статусы digest_runs и обработка грязных API payloads.
+Следующий шаг: зафиксировать контракт NewsItem/LLM output и подготовить golden fixtures для настройки prompt, score/category/action и dry-run debug режима.

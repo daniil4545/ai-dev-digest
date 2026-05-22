@@ -39,9 +39,38 @@
       `main.py` — инициализация БД, запуск bot polling + scheduler.
       Проверка: запустить, проверить что scheduler зарегистрирован и бот отвечает.
 
-- [ ] **M7: Tests**
-      Покрыть ключевые сценарии: пустые источники, дубликаты, ошибки API, все score < 3.
-      Проверка: `pytest tests/ -v` — все зелёные.
+- [x] **M7: Stabilize Pipeline Tests**
+      Зафиксировать рабочий скелет end-to-end: collect → score → storage → Telegram.
+      Покрыть ключевые сценарии:
+      - пустые sources;
+      - частично битые внешние API payloads;
+      - дубликаты внутри одного запуска и между запусками;
+      - все score < 3;
+      - Telegram send failure;
+      - параллельный `/digest` + scheduler.
+      Добавить smoke e2e с fake collect / fake LLM / fake Telegram без реальных сетевых запросов.
+      Проверка: `ruff check .` и `pytest -q` — зелёные.
 
-- [ ] **M8: README**
-      Установка, `.env`, запуск, пример дайджеста.
+- [~] **M8: Information Quality Loop**
+      Зафиксировать контракт качества информации: какие поля заполняет collector, какие LLM,
+      какие digest formatter. Доработать prompt для LLM:
+      - score 0..5;
+      - короткий русский title;
+      - why_it_matters;
+      - action / что попробовать;
+      - category;
+      - причина отсева для debug.
+      Добавить golden fixtures для 5-10 новостей и debug/dry-run режим,
+      чтобы смотреть raw collected items и scored items без отправки в Telegram.
+      Проверка: dry-run на fixtures показывает ожидаемые score/category/action.
+
+- [ ] **M9: Telegram Digest Format**
+      Доработать формат сообщения под реальное ежедневное чтение:
+      короткий daily digest, debug/full digest, секция `Try Today`,
+      устойчивый Markdown escaping, лимит длины Telegram-сообщения.
+      Добавить snapshot/golden tests на итоговый текст дайджеста.
+      Проверка: тесты подтверждают структуру, escaping, категории, action и поведение на длинном digest.
+
+- [ ] **M10: README / Runbook**
+      Установка, `.env`, запуск, `/health`, dry-run, пример дайджеста,
+      как читать debug output / БД и что делать при сбоях Telegram, Ollama или источников.

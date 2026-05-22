@@ -50,13 +50,13 @@ SOURCES: list[SourceConfig] = [
         name="Claude Code Changelog",
         url="https://github.com/anthropics/claude-code/releases.atom",
         type="rss",
-        category="tools",
+        category="ai-news",
     ),
     SourceConfig(
         name="OpenCode Releases",
         url="https://github.com/anomalyco/opencode/releases.atom",
         type="rss",
-        category="tools",
+        category="ai-news",
     ),
     SourceConfig(
         name="GitHub Trending",

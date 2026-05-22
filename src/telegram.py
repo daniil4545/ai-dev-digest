@@ -17,6 +17,7 @@ from src.storage import Storage
 logger = logging.getLogger(__name__)
 
 _DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "digest.db")
+_SEND_DIGEST_LOCK = asyncio.Lock()
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,15 +41,15 @@ async def health_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         get_config()
         config_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Health check config failed: %s", e)
     try:
         storage = Storage(_DB_PATH)
         storage.save_run(0, "health")
         storage.close()
         db_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Health check database failed: %s", e)
 
     if config_ok and db_ok:
         status = "✅"
@@ -80,6 +81,15 @@ async def sources_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def send_digest(app: Application, chat_id: int) -> None:
+    if _SEND_DIGEST_LOCK.locked():
+        await app.bot.send_message(chat_id=chat_id, text="Digest is already running.")
+        return
+
+    async with _SEND_DIGEST_LOCK:
+        await _send_digest(app, chat_id)
+
+
+async def _send_digest(app: Application, chat_id: int) -> None:
     config = get_config()
 
     try:
@@ -106,7 +116,6 @@ async def send_digest(app: Application, chat_id: int) -> None:
     try:
         for item in items:
             storage.save_item(item)
-        storage.save_run(len(scored), "success" if scored else "empty")
     except Exception as e:
         logger.error("Failed to store results: %s", e)
     finally:
@@ -115,11 +124,14 @@ async def send_digest(app: Application, chat_id: int) -> None:
     storage = Storage(_DB_PATH)
     try:
         seen: List[NewsItem] = []
+        current_urls: set[str] = set()
         skipped = 0
         for item in scored:
-            if storage.was_link_sent(item.url):
+            url_key = item.url.strip().lower()
+            if url_key in current_urls or storage.was_link_sent(item.url):
                 skipped += 1
             else:
+                current_urls.add(url_key)
                 seen.append(item)
         if skipped:
             logger.info("Dropped %d already-sent links", skipped)
@@ -130,13 +142,40 @@ async def send_digest(app: Application, chat_id: int) -> None:
         storage.close()
 
     if not scored:
+        storage = Storage(_DB_PATH)
+        try:
+            storage.save_run(0, "empty")
+        except Exception as e:
+            logger.error("Failed to record empty digest run: %s", e)
+        finally:
+            storage.close()
         await app.bot.send_message(
             chat_id=chat_id, text="No news worth reporting today."
         )
         return
 
     message = format_digest_message(scored)
-    await app.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+    try:
+        await app.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+    except Exception:
+        storage = Storage(_DB_PATH)
+        try:
+            storage.save_run(len(scored), "failed")
+        except Exception as e:
+            logger.error("Failed to record failed digest run: %s", e)
+        finally:
+            storage.close()
+        raise
+
+    storage = Storage(_DB_PATH)
+    try:
+        for item in scored:
+            storage.mark_link_sent(item.url)
+        storage.save_run(len(scored), "success")
+    except Exception as e:
+        logger.error("Failed to mark sent links: %s", e)
+    finally:
+        storage.close()
 
 
 async def digest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

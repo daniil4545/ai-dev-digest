@@ -59,7 +59,7 @@ class Storage:
 
     @staticmethod
     def _compute_hash(title: str, url: str) -> str:
-        """Return MD5 hex digest of ``title + url``.
+        """Return MD5 hex digest for duplicate detection.
 
         Args:
             title: item title.
@@ -68,13 +68,13 @@ class Storage:
         Returns:
             32-character MD5 hex digest.
         """
-        raw = f"{title}{url}".encode("utf-8")
+        raw = url.strip().lower().encode("utf-8")
         return hashlib.md5(raw).hexdigest()
 
     def save_item(self, item: NewsItem) -> int:
         """Persist a news item, ignoring duplicates.
 
-        Duplicates are detected by the MD5 hash of ``title + url``;
+        Duplicates are detected by URL hash;
         if the same hash already exists the row is silently skipped.
 
         Args:
@@ -103,7 +103,7 @@ class Storage:
         )
         self._conn.commit()
 
-        if cur.lastrowid is not None:
+        if cur.rowcount == 1 and cur.lastrowid is not None:
             return cur.lastrowid
 
         row = self._conn.execute(
@@ -143,6 +143,15 @@ class Storage:
         )
         self._conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
+
+    def mark_link_sent(self, url: str) -> None:
+        """Record a URL as already sent.
+
+        Args:
+            url: the link URL to record.
+        """
+        self._conn.execute("INSERT OR IGNORE INTO sent_links (url) VALUES (?)", (url,))
+        self._conn.commit()
 
     def was_link_sent(self, url: str) -> bool:
         """Check whether a URL has already been sent in a previous digest.

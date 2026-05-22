@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Pipeline smoke/e2e tests with fake collect, fake LLM, fake Telegram and temp SQLite
+- Edge-case tests for empty sources, malformed HN/Reddit payloads, duplicate links, empty scoring results, Telegram send failures and concurrent digest runs
+- `Storage.mark_link_sent()` helper for sent-link persistence
 - `MAX_ITEMS_PER_SOURCE` limit (50) to prevent massive single-source collection
 - `_filter_recent(items, hours)` — filters items older than N hours before scoring
 - `debug_scoop` mode — collects 1 item per source when `DEBUG_SCOOP=1` (fast testing)
@@ -15,13 +18,21 @@
 - Config options: `DEBUG_SCOOP`, `MAX_ITEM_HOURS`
 
 ### Changed
-- `score_news` / `score_news_batch` — two-pass scoring: heuristic first, LLM only for non-matching items
+- `score_news` / `score_news_batch` — LLM is the primary scorer; heuristic scoring is used as fallback on LLM failures
 - LLM prompt always requests Russian summary (`summary` field) instead of English `why_it_matters` + `action`
 - `_heuristic_score` — summary now comes from source data (`item.summary` or `item.title`)
-- Digest format: `1. Title\n   Summary (150 chars)\n   🔗 url` (removed Markdown link syntax)
+- Digest format: `1. Title\n   Summary\n   Action\n   🔗 url` with safe Markdown escaping
+- `.env` loading no longer overrides already exported environment variables
+- Duplicate detection now uses normalized URLs rather than title + URL hashes
 - Scheduler startup moved to `post_init` callback (fixes `RuntimeError: no running event loop`)
 
 ### Fixed
+- Telegram digest runs now record `success`, `empty` and `failed` after the actual send outcome
+- Duplicate links are filtered both within the current digest batch and across previous sent links
+- Concurrent manual/scheduled digest runs are serialized with an async lock
+- Ollama calls now use a request timeout and LLM scores are clamped to the 0..5 range
+- Malformed HN/Reddit payloads no longer abort the whole source collection
+- `Storage.save_item()` now returns the existing row id for duplicate inserts
 - JSON parsing for Ollama responses wrapped in ```json code blocks with trailing commas or single quotes
 - `RuntimeError: no running event loop` on `AsyncIOScheduler.start()` (moved to async post_init)
 - `test_collect_all` making real network requests (added `clear=True` to `mocker.patch.dict`)

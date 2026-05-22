@@ -54,7 +54,7 @@ class TestBuildDigest:
     def test_build_digest_basic(self) -> None:
         items = [
             _make_item(title="GPT-5", source="OpenAI Blog", score=5.0),
-            _make_item(title="Codex CLI v2", source="OpenCode Releases", score=4.0),
+            _make_item(title="Cursor v2", source="Cursor Blog", score=4.0),
             _make_item(title="Trending repo", source="GitHub Trending", score=3.0),
         ]
         result = build_digest(items)
@@ -63,8 +63,9 @@ class TestBuildDigest:
         assert "🧰 New Tools" in result
         assert "⭐ Trending" in result
         assert "1. GPT-5" in result
-        assert "2. Codex CLI v2" in result
+        assert "2. Cursor v2" in result
         assert "3. Trending repo" in result
+        assert "Action: Read more" in result
         assert "🔗 https://example.com" in result
 
     def test_build_digest_sorted_by_score(self) -> None:
@@ -119,3 +120,21 @@ class TestFormatDigestMessage:
     def test_format_digest_message_empty(self) -> None:
         result = format_digest_message([])
         assert result == ""
+
+    def test_format_digest_message_escapes_markdown(self) -> None:
+        items = [
+            _make_item(
+                title="Codex_CLI *release*",
+                source="OpenAI Blog",
+                score=5.0,
+                why_it_matters="Uses [agents] and `tools`",
+                url="https://example.com/codex_cli",
+            )
+        ]
+        result = format_digest_message(items)
+
+        assert "Codex\\_CLI \\*release\\*" in result
+        assert "\\[agents]" in result
+        assert "\\`tools\\`" in result
+        assert "Action: Read more" in result
+        assert "codex\\_cli" in result

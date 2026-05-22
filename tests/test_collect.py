@@ -79,7 +79,9 @@ class TestFilterRecent:
 class TestFetchRSS:
     def test_fetch_rss(self, mocker) -> None:
         mock_get = mocker.patch("src.collect.requests.get")
-        mock_get.return_value.text = "<rss><channel><item><title>dummy</title></item></channel></rss>"
+        mock_get.return_value.text = (
+            "<rss><channel><item><title>dummy</title></item></channel></rss>"
+        )
         mock_parse = mocker.patch("src.collect.feedparser.parse")
 
         class MockEntry:
@@ -104,7 +106,9 @@ class TestFetchRSS:
 
     def test_fetch_rss_no_date(self, mocker) -> None:
         mock_get = mocker.patch("src.collect.requests.get")
-        mock_get.return_value.text = "<rss><channel><item><title>dummy</title></item></channel></rss>"
+        mock_get.return_value.text = (
+            "<rss><channel><item><title>dummy</title></item></channel></rss>"
+        )
         mock_parse = mocker.patch("src.collect.feedparser.parse")
 
         class MockEntry:
@@ -272,6 +276,45 @@ class TestFetchReddit:
         assert len(items) == 1
         assert "reddit.com" in items[0].url
 
+    def test_fetch_reddit_skips_bad_children(self, mocker) -> None:
+        mock_get = mocker.patch("src.collect.requests.get")
+
+        resp = mocker.Mock()
+        resp.json.return_value = {
+            "data": {
+                "children": [
+                    None,
+                    {"data": None},
+                    {"data": {"title": "Missing score", "score": "not-a-number"}},
+                    {
+                        "data": {
+                            "title": "Good Post",
+                            "url": "https://example.com/good",
+                            "score": 12,
+                            "created_utc": 1700000000,
+                        }
+                    },
+                ]
+            }
+        }
+        resp.raise_for_status.return_value = None
+        mock_get.return_value = resp
+
+        items = fetch_reddit_hot("https://www.reddit.com/r/test/hot.json")
+
+        assert len(items) == 1
+        assert items[0].title == "Good Post"
+
+    def test_fetch_reddit_bad_root_payload(self, mocker) -> None:
+        mock_get = mocker.patch("src.collect.requests.get")
+
+        resp = mocker.Mock()
+        resp.json.return_value = ["not", "an", "object"]
+        resp.raise_for_status.return_value = None
+        mock_get.return_value = resp
+
+        assert fetch_reddit_hot("https://www.reddit.com/r/test/hot.json") == []
+
 
 class TestFetchGitHubTrending:
     def test_fetch_github_trending(self, mocker) -> None:
@@ -328,6 +371,14 @@ class TestFetchGitHubTrending:
 
 
 class TestCollectAll:
+    def test_collect_all_empty_sources(self, mocker) -> None:
+        mock_fetch = mocker.Mock(return_value=[])
+        mocker.patch("src.collect.SOURCES", [])
+        mocker.patch.dict("src.collect.FETCH_MAP", {"rss": mock_fetch}, clear=True)
+
+        assert collect_all() == []
+        mock_fetch.assert_not_called()
+
     def test_collect_all(self, mocker) -> None:
         rss_item = NewsItem(
             title="RSS Item",
@@ -380,7 +431,13 @@ class TestCollectAll:
     def test_collect_all_debug_scoop(self, mocker) -> None:
         now = datetime.now(timezone.utc).isoformat()
         items_multi = [
-            NewsItem(title=f"Item {i}", url=f"https://example.com/{i}", source="", published_at=now, summary="")
+            NewsItem(
+                title=f"Item {i}",
+                url=f"https://example.com/{i}",
+                source="",
+                published_at=now,
+                summary="",
+            )
             for i in range(5)
         ]
 
@@ -409,6 +466,33 @@ class TestErrorHandling:
 
         items = collect_all()
         assert items == []
+
+    def test_fetch_hn_skips_bad_item_json(self, mocker) -> None:
+        mock_get = mocker.patch("src.collect.requests.get")
+
+        list_resp = mocker.Mock()
+        list_resp.json.return_value = [1, 2]
+        list_resp.raise_for_status.return_value = None
+
+        bad_resp = mocker.Mock()
+        bad_resp.json.side_effect = ValueError("bad json")
+        bad_resp.raise_for_status.return_value = None
+
+        good_resp = mocker.Mock()
+        good_resp.json.return_value = {
+            "title": "Good Story",
+            "url": "https://example.com/good",
+            "score": 10,
+            "time": 1700000000,
+        }
+        good_resp.raise_for_status.return_value = None
+
+        mock_get.side_effect = [list_resp, bad_resp, good_resp]
+
+        items = fetch_hn_top()
+
+        assert len(items) == 1
+        assert items[0].title == "Good Story"
 
 
 class TestSources:

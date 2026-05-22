@@ -34,6 +34,14 @@ def _clean_title(title: str) -> str:
     return " ".join(title.replace("\n", " ").split())
 
 
+def _short_title(title: str, max_words: int = 5) -> str:
+    words = _clean_title(title).split()
+    words = [w.rstrip("/") for w in words]
+    if len(words) <= max_words:
+        return " ".join(words)
+    return " ".join(words[:max_words]) + "..."
+
+
 def _shorten(text: str, max_sentences: int = 2, max_chars: int = 150) -> str:
     if not text:
         return ""
@@ -42,6 +50,10 @@ def _shorten(text: str, max_sentences: int = 2, max_chars: int = 150) -> str:
     if len(short) > max_chars:
         short = short[: max_chars - 3].rsplit(" ", 1)[0] + "..."
     return short
+
+
+def _escape_markdown(text: str) -> str:
+    return re.sub(r"([_*`\[])", r"\\\1", text)
 
 
 def build_digest(items: List[NewsItem]) -> str:
@@ -69,12 +81,19 @@ def build_digest(items: List[NewsItem]) -> str:
 
         for item in group:
             index += 1
-            title = _clean_title(item.title)
-            summary = _shorten(item.why_it_matters)
+            title = _escape_markdown(_short_title(item.title))
+            summary = (item.why_it_matters or "").strip()
+            cleaned_title = _clean_title(item.title).lower()
+            if summary.lower().startswith(cleaned_title):
+                summary = ""
+            if len(summary) > 600:
+                summary = summary[:597].rsplit(" ", 1)[0] + "..."
             lines.append(f"{index}. {title}")
             if summary:
-                lines.append(f"   {summary}")
-            lines.append(f"   🔗 {item.url}")
+                lines.append(f"   {_escape_markdown(summary)}")
+            if item.action:
+                lines.append(f"   Action: {_escape_markdown(item.action.strip())}")
+            lines.append(f"   🔗 {_escape_markdown(item.url)}")
             lines.append("")
 
     return "\n".join(lines).strip()

@@ -42,6 +42,20 @@ def _fake_item(title="Test", score=3.0):
     )
 
 
+def _mock_config(mocker):
+    return mocker.patch(
+        "src.telegram.get_config",
+        return_value=Config(
+            telegram_bot_token="test",
+            telegram_chat_id="12345",
+            ollama_model="gemma3:4b",
+            ollama_host="http://localhost:11434",
+            digest_time="08:30",
+            timezone="Europe/Amsterdam",
+        ),
+    )
+
+
 class TestStartCommand:
     def test_start_command(self) -> None:
         update, context = _make_update_and_context()
@@ -101,6 +115,7 @@ class TestSourcesCommand:
 
 class TestDigestCommand:
     def test_digest_command_empty(self, mocker) -> None:
+        _mock_config(mocker)
         mocker.patch("src.telegram.collect_all", return_value=[])
         mocker.patch("src.telegram.score_news", return_value=[])
         mocker.patch("src.telegram.Storage")
@@ -113,11 +128,12 @@ class TestDigestCommand:
         )
 
     def test_digest_command_success(self, mocker) -> None:
+        _mock_config(mocker)
         items = [_fake_item(title="Claude update", score=4.0)]
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
-        mocker.patch("src.telegram.Storage")
-        mocker.patch("src.telegram.Storage").return_value.was_link_sent.return_value = False
+        mock_storage = mocker.patch("src.telegram.Storage")
+        mock_storage.return_value.was_link_sent.return_value = False
         mock_format = mocker.patch(
             "src.telegram.format_digest_message",
             return_value="*Digest content*",
@@ -134,6 +150,7 @@ class TestDigestCommand:
 
 class TestSendDigest:
     def test_send_digest_collect_fails(self, mocker) -> None:
+        _mock_config(mocker)
         mocker.patch(
             "src.telegram.collect_all", side_effect=RuntimeError("network down")
         )
@@ -146,6 +163,7 @@ class TestSendDigest:
         )
 
     def test_send_digest_score_fails(self, mocker) -> None:
+        _mock_config(mocker)
         mocker.patch("src.telegram.collect_all", return_value=[_fake_item()])
         mocker.patch("src.telegram.score_news", side_effect=RuntimeError("ollama down"))
         app = MagicMock()
@@ -157,9 +175,10 @@ class TestSendDigest:
         )
 
     def test_send_digest_empty(self, mocker) -> None:
+        _mock_config(mocker)
         mocker.patch("src.telegram.collect_all", return_value=[])
         mocker.patch("src.telegram.score_news", return_value=[])
-        mocker.patch("src.telegram.Storage")
+        mock_storage = mocker.patch("src.telegram.Storage")
         app = MagicMock()
         app.bot.send_message = AsyncMock()
         _run(send_digest, app, 12345)
@@ -167,8 +186,28 @@ class TestSendDigest:
             chat_id=12345,
             text="No news worth reporting today.",
         )
+        mock_storage.return_value.save_run.assert_called_with(0, "empty")
+
+    def test_send_digest_all_scores_below_threshold(self, mocker) -> None:
+        _mock_config(mocker)
+        items = [_fake_item(title="Low", score=1.0)]
+        mocker.patch("src.telegram.collect_all", return_value=items)
+        mocker.patch("src.telegram.score_news", return_value=[])
+        mock_storage = mocker.patch("src.telegram.Storage")
+        app = MagicMock()
+        app.bot.send_message = AsyncMock()
+
+        _run(send_digest, app, 12345)
+
+        mock_storage.return_value.save_item.assert_called_once_with(items[0])
+        mock_storage.return_value.save_run.assert_called_with(0, "empty")
+        app.bot.send_message.assert_awaited_with(
+            chat_id=12345,
+            text="No news worth reporting today.",
+        )
 
     def test_send_digest_success(self, mocker) -> None:
+        _mock_config(mocker)
         items = [_fake_item(title="GPT-5", score=5.0)]
         mocker.patch("src.telegram.collect_all", return_value=items)
         mocker.patch("src.telegram.score_news", return_value=items)
@@ -186,3 +225,44 @@ class TestSendDigest:
             text="*Digest*",
             parse_mode="Markdown",
         )
+        mock_storage.return_value.mark_link_sent.assert_called_once_with(items[0].url)
+        mock_storage.return_value.save_run.assert_called_with(1, "success")
+
+    def test_send_digest_skips_already_sent_links(self, mocker) -> None:
+        _mock_config(mocker)
+        items = [_fake_item(title="Old", score=5.0)]
+        mocker.patch("src.telegram.collect_all", return_value=items)
+        mocker.patch("src.telegram.score_news", return_value=items)
+        mock_storage = mocker.patch("src.telegram.Storage")
+        mock_storage.return_value.was_link_sent.return_value = True
+        app = MagicMock()
+        app.bot.send_message = AsyncMock()
+
+        _run(send_digest, app, 12345)
+
+        app.bot.send_message.assert_awaited_with(
+            chat_id=12345,
+            text="No news worth reporting today.",
+        )
+        mock_storage.return_value.mark_link_sent.assert_not_called()
+
+    def test_send_digest_deduplicates_current_batch(self, mocker) -> None:
+        _mock_config(mocker)
+        items = [
+            _fake_item(title="First", score=5.0),
+            _fake_item(title="Second", score=4.0),
+        ]
+        mocker.patch("src.telegram.collect_all", return_value=items)
+        mocker.patch("src.telegram.score_news", return_value=items)
+        mock_storage = mocker.patch("src.telegram.Storage")
+        mock_storage.return_value.was_link_sent.return_value = False
+        mock_format = mocker.patch(
+            "src.telegram.format_digest_message",
+            return_value="*Digest*",
+        )
+        app = MagicMock()
+        app.bot.send_message = AsyncMock()
+
+        _run(send_digest, app, 12345)
+
+        mock_format.assert_called_once_with([items[0]])

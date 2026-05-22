@@ -47,7 +47,7 @@ def load_config() -> Config:
         Config: populated configuration object.
     """
     env_file = Path(__file__).resolve().parent.parent / ".env"
-    load_dotenv(dotenv_path=env_file, override=True)
+    load_dotenv(dotenv_path=env_file, override=False)
 
     return Config(
         telegram_bot_token=_get_env("TELEGRAM_BOT_TOKEN"),

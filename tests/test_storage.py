@@ -43,7 +43,10 @@ class TestStorage:
         try:
             item = _make_item()
             storage.save_item(item)
-            assert not storage.is_duplicate(_make_item(title="Other"))
+            assert storage.is_duplicate(_make_item(title="Other"))
+            assert not storage.is_duplicate(
+                _make_item(title="Other", url="https://example.com/other")
+            )
 
             assert storage.is_duplicate(item)
             storage.save_item(item)
@@ -67,8 +70,7 @@ class TestStorage:
             url = "https://example.com/article"
             assert not storage.was_link_sent(url)
 
-            storage._conn.execute("INSERT INTO sent_links (url) VALUES (?)", (url,))
-            storage._conn.commit()
+            storage.mark_link_sent(url)
             assert storage.was_link_sent(url)
         finally:
             storage.close()

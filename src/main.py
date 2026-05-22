@@ -14,7 +14,9 @@ async def post_init(app: Application) -> None:
     start_scheduler(scheduler)
 
     config = get_config()
-    logger.info("Bot started. Daily digest at %s (%s)", config.digest_time, config.timezone)
+    logger.info(
+        "Bot started. Daily digest at %s (%s)", config.digest_time, config.timezone
+    )
 
 
 def main() -> None:

@@ -3,7 +3,13 @@ import json
 import pytest
 
 from src.config import Config
-from src.llm import KEYWORDS, _extract_json, _heuristic_score, score_news, score_news_batch
+from src.llm import (
+    KEYWORDS,
+    _extract_json,
+    _heuristic_fallback,
+    score_news,
+    score_news_batch,
+)
 from src.models import NewsItem
 
 
@@ -35,7 +41,9 @@ def _mock_ollama_chat(mocker, return_value=None, side_effect=None):
         mock_client.chat.side_effect = side_effect
     else:
         mock_client.chat.return_value = return_value or {
-            "message": {"content": '{"score": 3.0, "why_it_matters": "", "action": ""}'}
+            "message": {
+                "content": '{"score": 3.0, "title": "Test", "summary": "Test summary"}'
+            }
         }
     mocker.patch("src.llm.ollama.Client", return_value=mock_client)
     return mock_client
@@ -47,19 +55,19 @@ class TestExtractJson:
         assert data == {"score": 3}
 
     def test_inside_code_fence(self) -> None:
-        data = _extract_json("```json\n{\"score\": 4}\n```")
+        data = _extract_json('```json\n{"score": 4}\n```')
         assert data == {"score": 4}
 
     def test_code_fence_without_lang(self) -> None:
-        data = _extract_json("```\n{\"score\": 5}\n```")
+        data = _extract_json('```\n{"score": 5}\n```')
         assert data == {"score": 5}
 
     def test_extra_text_before_json(self) -> None:
-        data = _extract_json("Here is the JSON:\n{\"score\": 2}")
+        data = _extract_json('Here is the JSON:\n{"score": 2}')
         assert data == {"score": 2}
 
     def test_extra_text_around_json(self) -> None:
-        data = _extract_json("Rating: {\"score\": 1, \"why_it_matters\": \"ok\"}. End.")
+        data = _extract_json('Rating: {"score": 1, "why_it_matters": "ok"}. End.')
         assert data == {"score": 1, "why_it_matters": "ok"}
 
     def test_unparseable_raises(self) -> None:
@@ -75,7 +83,7 @@ class TestExtractJson:
         assert len(data) == 2
 
     def test_trailing_comma_in_code_fence(self) -> None:
-        data = _extract_json("```json\n{\"score\": 5,}\n```")
+        data = _extract_json('```json\n{"score": 5,}\n```')
         assert data == {"score": 5}
 
     def test_single_quotes_no_double(self) -> None:
@@ -95,7 +103,7 @@ class TestScoreNews:
             return_value={
                 "message": {
                     "content": (
-                        '{"score": 4.0, "summary": "Важное обновление платформы с новыми возможностями"}'
+                        '{"score": 4.0, "title": "Обновление платформы", "summary": "Важное обновление платформы с новыми возможностями"}'
                     )
                 }
             },
@@ -106,7 +114,11 @@ class TestScoreNews:
 
         assert len(result) == 1
         assert result[0].score == 4.0
-        assert result[0].why_it_matters == "Важное обновление платформы с новыми возможностями"
+        assert result[0].title == "Обновление платформы"
+        assert (
+            result[0].why_it_matters
+            == "Важное обновление платформы с новыми возможностями"
+        )
 
     def test_score_news_invalid_json(self, mocker) -> None:
         _mock_config(mocker)
@@ -145,12 +157,12 @@ class TestScoreNews:
         mock_client.chat.side_effect = [
             {
                 "message": {
-                    "content": '{"score": 4.0, "why_it_matters": "A", "action": "B"}'
+                    "content": '{"score": 4.0, "title": "Imp news", "summary": "A"}'
                 }
             },
             {
                 "message": {
-                    "content": '{"score": 2.0, "why_it_matters": "C", "action": "D"}'
+                    "content": '{"score": 2.0, "title": "Boring", "summary": "C"}'
                 }
             },
         ]
@@ -162,42 +174,41 @@ class TestScoreNews:
         result = score_news(items)
 
         assert len(result) == 1
-        assert result[0].title == "Important news"
+        assert result[0].title == "Imp news"
         assert result[0].score == 4.0
 
 
-class TestHeuristicScore:
-    def test_heuristic_score_high(self) -> None:
+class TestHeuristicFallback:
+    def test_heuristic_fallback_high(self) -> None:
         item = _make_item(title="New Claude feature released")
-        result = _heuristic_score(item)
+        result = _heuristic_fallback(item)
 
         assert result.score == 3.0
-        assert result.why_it_matters == "New Claude feature released"
-        assert result.action == ""
+        assert "Claude" in result.title
+        assert result.why_it_matters != ""
 
-    def test_heuristic_score_low(self) -> None:
+    def test_heuristic_fallback_low(self) -> None:
         item = _make_item(title="Weather forecast for today")
-        result = _heuristic_score(item)
+        result = _heuristic_fallback(item)
 
         assert result.score == 1.0
         assert result.why_it_matters == ""
-        assert result.action == ""
 
-    def test_heuristic_score_keywords(self) -> None:
+    def test_heuristic_fallback_keywords(self) -> None:
         for kw in sorted(KEYWORDS):
             item = _make_item(title=f"Great {kw} update")
-            result = _heuristic_score(item)
+            result = _heuristic_fallback(item)
             assert result.score == 3.0, f"Keyword '{kw}' not detected"
 
-    def test_heuristic_score_summary(self) -> None:
+    def test_heuristic_fallback_summary(self) -> None:
         item = _make_item(title="Something", summary="This is about mcp protocol")
-        result = _heuristic_score(item)
+        result = _heuristic_fallback(item)
 
         assert result.score == 3.0
 
-    def test_heuristic_score_case_insensitive(self) -> None:
+    def test_heuristic_fallback_case_insensitive(self) -> None:
         item = _make_item(title="CLAUDE Codex and GPT")
-        result = _heuristic_score(item)
+        result = _heuristic_fallback(item)
 
         assert result.score == 3.0
 
@@ -210,8 +221,8 @@ class TestScoreNewsBatch:
             return_value={
                 "message": {
                     "content": (
-                        '[{"score": 4.0, "summary": "Big update"},'
-                        ' {"score": 2.0, "summary": "Small update"}]'
+                        '[{"score": 4.0, "title": "Big update", "summary": "Big update content"},'
+                        ' {"score": 2.0, "title": "Small", "summary": "Small update"}]'
                     )
                 }
             },
@@ -224,7 +235,7 @@ class TestScoreNewsBatch:
         result = score_news_batch(items)
 
         assert len(result) == 1
-        assert result[0].title == "Claude update"
+        assert result[0].title == "Big update"
 
     def test_batch_fallback_on_error(self, mocker) -> None:
         _mock_config(mocker)

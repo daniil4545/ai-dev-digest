@@ -52,9 +52,17 @@ DEBUG_SCOOP=1 python -m src.main
 
 1. **Сбор** — RSS, Hacker News API, Reddit API, GitHub Trending (13 источников)
 2. **Фильтр** — только новости за последние 24 часа
-3. **Скоринг** — эвристика по keywords (claude, codex, gpt, mcp и др.), остальное — LLM (Ollama)
-4. **Дайджест** — сортировка по score, группировка по темам, саммари на русском
-5. **Отправка** — Telegram-сообщение с ссылками
+3. **Скоринг** — LLM (Ollama) оценивает новости, эвристика по keywords работает как fallback
+4. **Дайджест** — сортировка по score, группировка по темам, саммари/action на русском
+5. **Отправка** — Telegram-сообщение с Markdown escaping и защитой от повторных ссылок
+
+## Надёжность pipeline
+
+- Один битый источник или malformed payload не должен валить весь сбор.
+- Повторные ссылки фильтруются внутри текущего запуска и между запусками через SQLite `sent_links`.
+- Параллельные запуски `/digest` и scheduler сериализуются lock'ом.
+- `digest_runs` фиксирует результат запуска: `success`, `empty` или `failed`.
+- Тесты используют fake collect / fake LLM / fake Telegram, без реальных сетевых запросов.
 
 ## Структура
 
@@ -81,5 +89,9 @@ OpenAI Blog, Anthropic Blog, Cursor Blog, Google DeepMind, Groq News, Stability 
 ## Тесты
 
 ```bash
-pytest tests/ -v
+ruff format --check .
+ruff check .
+pytest -q
 ```
+
+Текущий smoke-набор проверяет полный путь collect → score → storage → Telegram на временной SQLite.

@@ -44,7 +44,12 @@ def _filter_recent(items: List[NewsItem], hours: int = 24) -> List[NewsItem]:
         except (ValueError, TypeError):
             filtered.append(item)
     if filtered:
-        logger.info("Time filter: %d / %d items are newer than %d hours", len(filtered), len(items), hours)
+        logger.info(
+            "Time filter: %d / %d items are newer than %d hours",
+            len(filtered),
+            len(items),
+            hours,
+        )
     return filtered
 
 
@@ -121,8 +126,8 @@ def fetch_hn_top() -> List[NewsItem]:
                     score=score,
                 )
             )
-        except requests.RequestException:
-            logger.warning("Failed to fetch HN item %s", sid)
+        except (requests.RequestException, ValueError, TypeError) as e:
+            logger.warning("Failed to fetch HN item %s: %s", sid, e)
             continue
     return items
 
@@ -133,30 +138,39 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         logger.warning("Failed to fetch Reddit %s: %s", url, e)
+        return []
+    if not isinstance(data, dict):
+        logger.warning("Failed to parse Reddit %s: root payload is not an object", url)
         return []
 
     items: List[NewsItem] = []
     for child in data.get("data", {}).get("children", []):
-        post = child.get("data", {})
-        title = str(post.get("title", ""))
-        post_url = str(post.get("url", ""))
-        if not post_url or post_url.startswith("https://www.reddit.com/r/"):
-            post_url = f"https://www.reddit.com{post.get('permalink', '')}"
-        score = float(post.get("score", 0))
-        created = post.get("created_utc", 0)
-        published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
-        items.append(
-            NewsItem(
-                title=title,
-                url=post_url,
-                source="",
-                published_at=published_at,
-                summary=_truncate(post.get("selftext", title)),
-                score=score,
+        try:
+            post = child.get("data", {})
+            if not isinstance(post, dict):
+                continue
+            title = str(post.get("title", ""))
+            post_url = str(post.get("url", ""))
+            if not post_url or post_url.startswith("https://www.reddit.com/r/"):
+                post_url = f"https://www.reddit.com{post.get('permalink', '')}"
+            score = float(post.get("score", 0))
+            created = post.get("created_utc", 0)
+            published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
+            items.append(
+                NewsItem(
+                    title=title,
+                    url=post_url,
+                    source="",
+                    published_at=published_at,
+                    summary=_truncate(post.get("selftext", title)),
+                    score=score,
+                )
             )
-        )
+        except (AttributeError, TypeError, ValueError) as e:
+            logger.warning("Skipping malformed Reddit child in %s: %s", url, e)
+            continue
     return items
 
 
@@ -236,7 +250,8 @@ def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> List[New
                 item.source = source.name
             logger.info(
                 "Collected %d items from %s%s",
-                len(items), source.name,
+                len(items),
+                source.name,
                 " (debug scoop)" if debug_scoop else "",
             )
             all_items.extend(items)
