@@ -34,7 +34,7 @@
       `/health` (проверка БД + API ключей), `/sources` (список источников).
       Проверка: запустить `python src/main.py`, отправить команды в Telegram.
 
-- [~] **M6: Scheduler + Main**
+- [x] **M6: Scheduler + Main**
       `scheduler.py` — APScheduler, ежедневный job в `DIGEST_TIME`.
       `main.py` — инициализация БД, запуск bot polling + scheduler.
       Проверка: запустить, проверить что scheduler зарегистрирован и бот отвечает.

@@ -20,6 +20,9 @@
 - `tests/test_digest.py` — 7 tests covering sorting, grouping, empty, sequential index
 - `src/telegram.py` — Telegram bot with /digest, /health, /sources, /start commands
 - `tests/test_telegram.py` — 10 tests with mocked Telegram API
+- `src/scheduler.py` — APScheduler daily job at configurable time
+- `src/main.py` — application entry point
+- `tests/test_scheduler.py` — 4 tests for scheduler setup and job execution
 
 ### Changed
 - LLM provider switched from OpenAI to Ollama (gemma3:4b) for news scoring

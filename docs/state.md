@@ -1,3 +1,3 @@
-Текущий milestone: M5 — Telegram Commands.
-Сделано: 4 команды (/start, /digest, /health, /sources), send_digest pipeline с обработкой ошибок, async сбор через to_thread.
-Следующий шаг: M6 — Scheduler + Main (scheduler.py, main.py, APScheduler daily job).
+Текущий milestone: M6 — Scheduler + Main.
+Сделано: APScheduler с ежедневным job, точка входа main.py, интеграция всех модулей.
+Следующий шаг: M7 — Tests (edge cases, интеграционные сценарии).
