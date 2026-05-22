@@ -20,12 +20,12 @@
       нормализация в `NewsItem` (dataclass).
       Проверка: запустить collect, проверить что вернулись `NewsItem` с заполненными полями.
 
-- [~] **M3: LLM Scoring**
+- [x] **M3: LLM Scoring**
       `llm.py` — Ollama client (gemma3:4b), функция `score_news(items)` → возвращает items с score/why_it_matters/action,
       фильтр `score >= 3`.
       Проверка: `pytest tests/test_llm.py` с mock ollama.
 
-- [ ] **M4: Digest**
+- [~] **M4: Digest**
       `digest.py` — сортировка по score, группировка по темам, форматирование в Telegram-разметку.
       Проверка: `pytest tests/test_digest.py` — на вход набор NewsItem, на выход строка с ожидаемой структурой.
 

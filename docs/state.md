@@ -1,3 +1,3 @@
-Текущий milestone: M2 — Sources + Collect.
-Сделано: 9 источников (RSS, HN, Reddit, GitHub Trending), 4 парсера с FETCH_MAP, обработка ошибок.
-Следующий шаг: M3 — LLM Scoring (llm.py, Ollama client, score_news с фильтром, тесты с mock ollama).
+Текущий milestone: M3 — LLM Scoring.
+Сделано: Ollama client для оценки новостей, эвристический fallback по ключевым словам, batch/sequential режимы.
+Следующий шаг: M4 — Digest (digest.py, сортировка, группировка, Telegram-разметка).
