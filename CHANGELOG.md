@@ -18,6 +18,8 @@
 - `tests/test_llm.py` — 13 tests covering LLM, heuristic, batch, and error handling
 - `src/digest.py` — digest builder with score sorting, category grouping, Telegram formatting
 - `tests/test_digest.py` — 7 tests covering sorting, grouping, empty, sequential index
+- `src/telegram.py` — Telegram bot with /digest, /health, /sources, /start commands
+- `tests/test_telegram.py` — 10 tests with mocked Telegram API
 
 ### Changed
 - LLM provider switched from OpenAI to Ollama (gemma3:4b) for news scoring
