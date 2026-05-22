@@ -1,3 +1,3 @@
-Текущий milestone: M0 — Scaffold.
-Сделано: создана структура проекта, настроен venv, установлены зависимости, инициализирован git. LLM заменён с OpenAI на Ollama (gemma3:4b).
-Следующий шаг: M1 — Config + Storage (config.py, storage.py, SQLite таблицы).
+Текущий milestone: M1 — Config + Storage.
+Сделано: реализованы Config (dataclass + env loading), Storage (SQLite, 3 таблицы, duplicate detection через MD5).
+Следующий шаг: M2 — Sources + Collect (sources.py, collect.py, NewsItem сбор из RSS/HN/Reddit/GitHub Trending).

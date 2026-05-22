@@ -28,9 +28,8 @@ AI Dev Digest Bot — Telegram бот, который каждый день в 0
 - pytest
 
 LLM:
-- OpenAI API
-- Anthropic API
-- Ollama (optional)
+- Ollama (local, gemma3:4b)
+- Fallback: эвристический скоринг без LLM
 
 ---
 
@@ -53,6 +52,7 @@ LLM:
 ```text
 src/
   main.py
+  models.py
   config.py
   scheduler.py
   telegram.py
@@ -180,8 +180,8 @@ Use hashes to avoid duplicate news.
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
+OLLAMA_MODEL=gemma3:4b
+OLLAMA_HOST=http://localhost:11434
 
 DIGEST_TIME=08:30
 TIMEZONE=Europe/Amsterdam
