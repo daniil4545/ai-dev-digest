@@ -14,13 +14,13 @@
       методы `save_item`, `is_duplicate`, `save_run`, `was_link_sent`, `get_recent_items`.
       Проверка: `pytest tests/test_storage.py` с `:memory:` SQLite.
 
-- [~] **M2: Sources + Collect**
+- [x] **M2: Sources + Collect**
       `sources.py` — описание источников (name, url, type, parser).
       `collect.py` — сбор из RSS (feedparser), HN (API), Reddit (API), GitHub Trending (scrape),
       нормализация в `NewsItem` (dataclass).
       Проверка: запустить collect, проверить что вернулись `NewsItem` с заполненными полями.
 
-- [ ] **M3: LLM Scoring**
+- [~] **M3: LLM Scoring**
       `llm.py` — Ollama client (gemma3:4b), функция `score_news(items)` → возвращает items с score/why_it_matters/action,
       фильтр `score >= 3`.
       Проверка: `pytest tests/test_llm.py` с mock ollama.

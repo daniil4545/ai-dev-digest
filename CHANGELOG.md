@@ -11,6 +11,9 @@
 - `src/config.py` — Config dataclass with env loading via python-dotenv and cached singleton
 - `src/storage.py` — SQLite storage with news_items, digest_runs, sent_links tables
 - `tests/test_storage.py` — 6 tests covering CRUD, duplicate detection, link tracking
+- `src/sources.py` — 9 source configs (RSS, HN API, Reddit API, GitHub Trending)
+- `src/collect.py` — 4 parsers with FETCH_MAP dispatcher and error handling
+- `tests/test_collect.py` — 20 tests covering all parsers, error cases, and collect_all
 
 ### Changed
 - LLM provider switched from OpenAI to Ollama (gemma3:4b) for news scoring

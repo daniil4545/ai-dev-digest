@@ -1,3 +1,3 @@
-Текущий milestone: M1 — Config + Storage.
-Сделано: реализованы Config (dataclass + env loading), Storage (SQLite, 3 таблицы, duplicate detection через MD5).
-Следующий шаг: M2 — Sources + Collect (sources.py, collect.py, NewsItem сбор из RSS/HN/Reddit/GitHub Trending).
+Текущий milestone: M2 — Sources + Collect.
+Сделано: 9 источников (RSS, HN, Reddit, GitHub Trending), 4 парсера с FETCH_MAP, обработка ошибок.
+Следующий шаг: M3 — LLM Scoring (llm.py, Ollama client, score_news с фильтром, тесты с mock ollama).
