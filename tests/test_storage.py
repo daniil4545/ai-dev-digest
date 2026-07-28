@@ -81,3 +81,12 @@ class TestStorage:
             assert storage.get_recent_items() == []
         finally:
             storage.close()
+
+    def test_creates_missing_parent_directory(self, tmp_path) -> None:
+        db_path = tmp_path / "nested" / "digest.db"
+        storage = Storage(str(db_path))
+        try:
+            assert db_path.exists()
+            assert db_path.parent.is_dir()
+        finally:
+            storage.close()

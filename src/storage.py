@@ -1,6 +1,7 @@
 import hashlib
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
 from src.models import NewsItem
@@ -21,6 +22,8 @@ class Storage:
             db_path: filesystem path to the SQLite database file, or
                 ``\":memory:\"`` for an in-memory database (default).
         """
+        if db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._create_tables()
