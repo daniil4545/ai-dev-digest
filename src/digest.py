@@ -1,10 +1,9 @@
 import re
-from typing import Dict, List
 
 from src.models import NewsItem
 from src.sources import SOURCES
 
-CATEGORY_HEADERS: Dict[str, str] = {
+CATEGORY_HEADERS: dict[str, str] = {
     "ai-news": "🔥 Main Updates",
     "tools": "🧰 New Tools",
     "trending": "⭐ Trending",
@@ -12,7 +11,7 @@ CATEGORY_HEADERS: Dict[str, str] = {
     "community": "💬 Community",
 }
 
-CATEGORY_ORDER: List[str] = [
+CATEGORY_ORDER: list[str] = [
     "ai-news",
     "tools",
     "trending",
@@ -21,7 +20,7 @@ CATEGORY_ORDER: List[str] = [
     "other",
 ]
 
-_source_to_category: Dict[str, str] = {}
+_source_to_category: dict[str, str] = {}
 for s in SOURCES:
     _source_to_category[s.name] = s.category
 
@@ -56,18 +55,18 @@ def _escape_markdown(text: str) -> str:
     return re.sub(r"([_*`\[])", r"\\\1", text)
 
 
-def build_digest(items: List[NewsItem]) -> str:
+def build_digest(items: list[NewsItem]) -> str:
     if not items:
         return ""
 
     sorted_items = sorted(items, key=lambda x: x.score, reverse=True)
 
-    grouped: Dict[str, List[NewsItem]] = {}
+    grouped: dict[str, list[NewsItem]] = {}
     for item in sorted_items:
         cat = _get_category(item.source)
         grouped.setdefault(cat, []).append(item)
 
-    lines: List[str] = []
+    lines: list[str] = []
     index = 0
 
     for cat in CATEGORY_ORDER:
@@ -99,7 +98,7 @@ def build_digest(items: List[NewsItem]) -> str:
     return "\n".join(lines).strip()
 
 
-def format_digest_message(items: List[NewsItem]) -> str:
+def format_digest_message(items: list[NewsItem]) -> str:
     body = build_digest(items)
     if not body:
         return ""

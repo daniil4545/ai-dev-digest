@@ -103,7 +103,9 @@ class TestScoreNews:
             return_value={
                 "message": {
                     "content": (
-                        '{"score": 4.0, "title": "Обновление платформы", "summary": "Важное обновление платформы с новыми возможностями"}'
+                        '{"score": 4.0, "title": "Обновление платформы", '
+                        '"summary": "Важное обновление платформы с новыми '
+                        'возможностями"}'
                     )
                 }
             },
@@ -221,7 +223,8 @@ class TestScoreNewsBatch:
             return_value={
                 "message": {
                     "content": (
-                        '[{"score": 4.0, "title": "Big update", "summary": "Big update content"},'
+                        '[{"score": 4.0, "title": "Big update", '
+                        '"summary": "Big update content"},'
                         ' {"score": 2.0, "title": "Small", "summary": "Small update"}]'
                     )
                 }

@@ -1,6 +1,7 @@
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, List
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import feedparser
 import requests
@@ -17,12 +18,12 @@ MAX_ITEMS_PER_SOURCE = 50
 
 def _parse_date(date_tuple: Any) -> str:
     if date_tuple is None:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
     try:
-        dt = datetime(*date_tuple[:6], tzinfo=timezone.utc)
+        dt = datetime(*date_tuple[:6], tzinfo=UTC)
         return dt.isoformat()
     except (TypeError, ValueError):
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
 
 def _truncate(text: str, max_len: int = 500) -> str:
@@ -31,14 +32,14 @@ def _truncate(text: str, max_len: int = 500) -> str:
     return text[:max_len].rsplit(" ", 1)[0] + "..."
 
 
-def _filter_recent(items: List[NewsItem], hours: int = 24) -> List[NewsItem]:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+def _filter_recent(items: list[NewsItem], hours: int = 24) -> list[NewsItem]:
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     filtered = []
     for item in items:
         try:
             published = datetime.fromisoformat(item.published_at)
             if published.tzinfo is None:
-                published = published.replace(tzinfo=timezone.utc)
+                published = published.replace(tzinfo=UTC)
             if published >= cutoff:
                 filtered.append(item)
         except (ValueError, TypeError):
@@ -53,7 +54,7 @@ def _filter_recent(items: List[NewsItem], hours: int = 24) -> List[NewsItem]:
     return filtered
 
 
-def fetch_rss(url: str) -> List[NewsItem]:
+def fetch_rss(url: str) -> list[NewsItem]:
     try:
         headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
@@ -69,7 +70,7 @@ def fetch_rss(url: str) -> List[NewsItem]:
         logger.warning("Failed to parse RSS feed %s: %s", url, e)
         return []
 
-    items: List[NewsItem] = []
+    items: list[NewsItem] = []
     for entry in feed.entries:
         title = getattr(entry, "title", "")
         link = getattr(entry, "link", "")
@@ -87,7 +88,7 @@ def fetch_rss(url: str) -> List[NewsItem]:
     return items
 
 
-def fetch_hn_top() -> List[NewsItem]:
+def fetch_hn_top() -> list[NewsItem]:
     try:
         response = requests.get(
             "https://hacker-news.firebaseio.com/v0/topstories.json",
@@ -99,7 +100,7 @@ def fetch_hn_top() -> List[NewsItem]:
         logger.warning("Failed to fetch HN top stories: %s", e)
         return []
 
-    items: List[NewsItem] = []
+    items: list[NewsItem] = []
     for sid in story_ids:
         try:
             resp = requests.get(
@@ -114,7 +115,7 @@ def fetch_hn_top() -> List[NewsItem]:
             url = data.get("url", f"https://news.ycombinator.com/item?id={sid}")
             score = float(data.get("score", 0))
             published_at = datetime.fromtimestamp(
-                data.get("time", 0), tz=timezone.utc
+                data.get("time", 0), tz=UTC
             ).isoformat()
             items.append(
                 NewsItem(
@@ -132,7 +133,7 @@ def fetch_hn_top() -> List[NewsItem]:
     return items
 
 
-def fetch_reddit_hot(url: str) -> List[NewsItem]:
+def fetch_reddit_hot(url: str) -> list[NewsItem]:
     try:
         headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
@@ -145,7 +146,7 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
         logger.warning("Failed to parse Reddit %s: root payload is not an object", url)
         return []
 
-    items: List[NewsItem] = []
+    items: list[NewsItem] = []
     for child in data.get("data", {}).get("children", []):
         try:
             post = child.get("data", {})
@@ -157,7 +158,7 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
                 post_url = f"https://www.reddit.com{post.get('permalink', '')}"
             score = float(post.get("score", 0))
             created = post.get("created_utc", 0)
-            published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
+            published_at = datetime.fromtimestamp(created, tz=UTC).isoformat()
             items.append(
                 NewsItem(
                     title=title,
@@ -174,7 +175,7 @@ def fetch_reddit_hot(url: str) -> List[NewsItem]:
     return items
 
 
-def fetch_github_trending(url: str) -> List[NewsItem]:
+def fetch_github_trending(url: str) -> list[NewsItem]:
     try:
         headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
@@ -184,7 +185,7 @@ def fetch_github_trending(url: str) -> List[NewsItem]:
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
-    items: List[NewsItem] = []
+    items: list[NewsItem] = []
     for article in soup.select("article.Box-row"):
         h2 = article.select_one("h2")
         if not h2:
@@ -209,7 +210,7 @@ def fetch_github_trending(url: str) -> List[NewsItem]:
             except ValueError:
                 stars = 0.0
 
-        published_at = datetime.now(timezone.utc).isoformat()
+        published_at = datetime.now(UTC).isoformat()
         items.append(
             NewsItem(
                 title=repo_name,
@@ -223,7 +224,7 @@ def fetch_github_trending(url: str) -> List[NewsItem]:
     return items
 
 
-FETCH_MAP: dict[str, Callable[..., List[NewsItem]]] = {
+FETCH_MAP: dict[str, Callable[..., list[NewsItem]]] = {
     "rss": fetch_rss,
     "hn_api": fetch_hn_top,
     "reddit_api": fetch_reddit_hot,
@@ -231,8 +232,8 @@ FETCH_MAP: dict[str, Callable[..., List[NewsItem]]] = {
 }
 
 
-def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> List[NewsItem]:
-    all_items: List[NewsItem] = []
+def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> list[NewsItem]:
+    all_items: list[NewsItem] = []
     for source in SOURCES:
         fetcher = FETCH_MAP.get(source.type)
         if fetcher is None:

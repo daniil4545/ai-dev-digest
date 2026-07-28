@@ -1,9 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import List
 
-from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from src.collect import collect_all
@@ -13,6 +11,7 @@ from src.llm import score_news
 from src.models import NewsItem
 from src.sources import SOURCES
 from src.storage import Storage
+from telegram import Update
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +122,7 @@ async def _send_digest(app: Application, chat_id: int) -> None:
 
     storage = Storage(_DB_PATH)
     try:
-        seen: List[NewsItem] = []
+        seen: list[NewsItem] = []
         current_urls: set[str] = set()
         skipped = 0
         for item in scored:

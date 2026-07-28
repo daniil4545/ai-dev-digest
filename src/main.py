@@ -4,7 +4,7 @@ from telegram.ext import Application
 
 from src.config import get_config
 from src.scheduler import setup_scheduler, start_scheduler
-from src.telegram import setup_application, run_polling
+from src.telegram import run_polling, setup_application
 
 logger = logging.getLogger(__name__)
 

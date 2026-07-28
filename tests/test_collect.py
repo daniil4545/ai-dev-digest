@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -47,7 +47,7 @@ class TestFilterRecent:
         )
 
     def test_recent_item_passes(self) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         items = [self._item(now)]
         result = _filter_recent(items, hours=24)
         assert len(result) == 1
@@ -58,7 +58,7 @@ class TestFilterRecent:
         assert len(result) == 0
 
     def test_mixed_items(self) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         items = [
             self._item("2024-01-01T00:00:00+00:00"),
             self._item(now),
@@ -429,7 +429,7 @@ class TestCollectAll:
             assert item.source != ""
 
     def test_collect_all_debug_scoop(self, mocker) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         items_multi = [
             NewsItem(
                 title=f"Item {i}",

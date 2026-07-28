@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Any, List
+from typing import Any
 
 import ollama
 
@@ -30,7 +30,9 @@ def _build_prompt(item: NewsItem) -> str:
     text = f"{item.title} — {item.summary}"
     return (
         f"Оцени новость для разработчика, интересующегося AI coding tools.\n"
-        f'Верни JSON: {{"score": 0-5, "title": "короткий заголовок (2-5 слов, по-русски)", "summary": "краткое содержание на русском (до 100 слов, связный текст)"}}\n'
+        'Верни JSON: {"score": 0-5, "title": "короткий заголовок (2-5 слов, '
+        'по-русски)", "summary": "краткое содержание на русском (до 100 слов, '
+        'связный текст)"}\n'
         f"Новость: {text}"
     )
 
@@ -75,7 +77,10 @@ def _apply_llm_result(item: NewsItem, data: dict) -> None:
 
 
 def _clean_json_string(s: str) -> str:
-    """Fix common LLM JSON formatting issues (trailing commas, single quotes, Python booleans)."""
+    """Fix common LLM JSON formatting issues.
+
+    Handles trailing commas, single quotes and Python booleans.
+    """
     s = re.sub(r",\s*}", "}", s)
     s = re.sub(r",\s*]", "]", s)
     s = s.replace("None", "null").replace("True", "true").replace("False", "false")
@@ -187,13 +192,13 @@ def _extract_json(content: str) -> Any:
     raise json.JSONDecodeError("Could not extract JSON", content, 0)
 
 
-def score_news(items: List[NewsItem]) -> List[NewsItem]:
+def score_news(items: list[NewsItem]) -> list[NewsItem]:
     config = get_config()
     client = ollama.Client(host=config.ollama_host, timeout=REQUEST_TIMEOUT)
     logger.info("Scoring %d news items (all go through LLM)", len(items))
 
     total = len(items)
-    scored: List[NewsItem] = []
+    scored: list[NewsItem] = []
 
     for idx, item in enumerate(items):
         try:
@@ -231,17 +236,19 @@ def score_news(items: List[NewsItem]) -> List[NewsItem]:
     return scored
 
 
-def score_news_batch(items: List[NewsItem]) -> List[NewsItem]:
+def score_news_batch(items: list[NewsItem]) -> list[NewsItem]:
     config = get_config()
     client = ollama.Client(host=config.ollama_host, timeout=REQUEST_TIMEOUT)
     logger.info("Batch scoring %d news items", len(items))
 
-    scored: List[NewsItem] = []
+    scored: list[NewsItem] = []
 
     try:
         batch_prompt = (
             "Rate these news for a developer interested in AI coding tools.\n"
-            'Return JSON array: [{"score": 0-5, "title": "короткий заголовок (2-5 слов, по-русски)", "summary": "краткое содержание на русском (до 100 слов, связный текст)"}, ...]\n\n'
+            'Return JSON array: [{"score": 0-5, "title": "короткий заголовок '
+            '(2-5 слов, по-русски)", "summary": "краткое содержание на русском '
+            '(до 100 слов, связный текст)"}, ...]\n\n'
         )
         for i, item in enumerate(items):
             batch_prompt += f"{i + 1}. {item.title} — {item.summary}\n"

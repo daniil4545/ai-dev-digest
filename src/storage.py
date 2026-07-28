@@ -1,8 +1,7 @@
 import hashlib
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List
 
 from src.models import NewsItem
 
@@ -139,7 +138,7 @@ class Storage:
         Returns:
             row id of the newly inserted run.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         cur = self._conn.execute(
             "INSERT INTO digest_runs (run_at, item_count, status) VALUES (?, ?, ?)",
             (now, item_count, status),
@@ -170,7 +169,7 @@ class Storage:
         ).fetchone()
         return row is not None
 
-    def get_recent_items(self, limit: int = 50) -> List[NewsItem]:
+    def get_recent_items(self, limit: int = 50) -> list[NewsItem]:
         """Return the most recent news items ordered by ``created_at`` desc.
 
         Args:
@@ -189,7 +188,10 @@ class Storage:
             "why_it_matters",
             "action",
         ]
-        query = f"SELECT {', '.join(columns)} FROM news_items ORDER BY created_at DESC LIMIT ?"
+        query = (
+            f"SELECT {', '.join(columns)} FROM news_items "
+            "ORDER BY created_at DESC LIMIT ?"
+        )
         rows = self._conn.execute(query, (limit,)).fetchall()
         return [NewsItem(**dict(r)) for r in rows]
 
