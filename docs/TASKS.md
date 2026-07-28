@@ -54,15 +54,16 @@
 - [~] **M8: Information Quality Loop**
       Зафиксировать контракт качества информации: какие поля заполняет collector, какие LLM,
       какие digest formatter. Доработать prompt для LLM:
-      - score 0..5;
-      - короткий русский title;
-      - why_it_matters;
-      - action / что попробовать;
-      - category;
-      - причина отсева для debug.
-      Добавить golden fixtures для 5-10 новостей и debug/dry-run режим,
-      чтобы смотреть raw collected items и scored items без отправки в Telegram.
-      Проверка: dry-run на fixtures показывает ожидаемые score/category/action.
+      - score 0..5 — сделано (см. CHANGELOG);
+      - короткий русский title — сделано;
+      - summary на русском вместо why_it_matters/action — сделано (осознанное отклонение
+        от исходного контракта, см. AGENTS.md News Model);
+      - category — используется category источника, отдельного LLM-поля нет;
+      - причина отсева для debug — не реализовано.
+      Golden fixtures для 5-10 новостей и debug/dry-run режим (raw collected/scored items
+      без отправки в Telegram) — перенесены за рамки текущего этапа (новая функциональность,
+      не входит в доведение существующего до рабочего состояния). M8 остаётся в работе, не
+      считать завершённым до их реализации.
 
 - [ ] **M9: Telegram Digest Format**
       Доработать формат сообщения под реальное ежедневное чтение:
