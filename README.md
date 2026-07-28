@@ -1,19 +1,40 @@
-# AI Dev Digest Bot
+# ai-dev-digest
 
-Telegram-бот, который ежедневно в 08:30 собирает новости из AI/dev-сферы, фильтрует шум через локальную LLM (Ollama) и отправляет краткую сводку.
+Ежедневный Telegram-дайджест AI/dev-новостей из 13 источников: сбор, скоринг локальной LLM (Ollama), краткая сводка на русском в заданное время.
 
-## Stack
+Пайплайн: RSS, Hacker News API, Reddit API и GitHub Trending собираются в общий список, фильтруются по возрасту, оцениваются LLM, сортируются по score и уходят одним сообщением в Telegram. Пайплайн переживает сбой любого источника и недоступность LLM.
 
-Python 3.12+ · python-telegram-bot · APScheduler · SQLite · Ollama (gemma3:4b)
-
-## Установка
+## Быстрый старт
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/daniil4545/ai-dev-digest.git
+cd ai-dev-digest
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env   # заполнить TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID
+python -m src.main
 ```
+
+Режим отладки, результат за 1-2 минуты (по 1 новости с источника):
+
+```bash
+DEBUG_SCOOP=1 python -m src.main
+```
+
+## Инженерные решения
+
+- **Изоляция сбоев источников.** Каждый источник опрашивается независимо; сетевой сбой или malformed payload логируется и не валит сбор остальных 12.
+- **Эвристический fallback без LLM.** При недоступности Ollama скоринг деградирует до keyword-эвристики; дайджест выходит в любом случае.
+- **Дедуп между запусками.** Отправленные ссылки фиксируются в SQLite-таблице `sent_links` (`INSERT OR IGNORE`); повторы фильтруются и внутри одного запуска, и между запусками.
+- **Сериализация запусков.** Ручной `/digest` и запуск по расписанию не пересекаются: отправка защищена asyncio-lock.
+- **Журнал запусков.** Каждый запуск пишется в `digest_runs` со статусом `success`, `empty` или `failed`; это основа команды `/health`.
+- **Тесты без сети.** Полный путь collect, score, storage, Telegram проверяется на fake-реализациях и временной SQLite.
+
+## Команды
+
+- `/digest` собрать и отправить дайджест сейчас
+- `/health` проверить конфиг и БД
+- `/sources` список источников
 
 ## Настройка `.env`
 
@@ -22,64 +43,27 @@ cp .env.example .env
 | `TELEGRAM_BOT_TOKEN` | Токен бота от @BotFather |
 | `TELEGRAM_CHAT_ID` | ID чата (узнать через @userinfobot) |
 | `OLLAMA_MODEL` | Модель Ollama (по умолчанию gemma3:4b) |
-| `OLLAMA_HOST` | Адрес Ollama (по умолч. http://localhost:11434) |
-| `DIGEST_TIME` | Время отправки дайджеста (по умолч. 08:30) |
-| `TIMEZONE` | Часовой пояс (по умолч. Europe/Amsterdam) |
-| `DEBUG_SCOOP` | `1` — режим отладки (1 новость на источник) |
-| `MAX_ITEM_HOURS` | Макс. возраст новости в часах (по умолч. 24) |
-
-## Запуск
-
-```bash
-python -m src.main
-```
-
-## Команды
-
-- `/digest` — собрать и отправить дайджест сейчас
-- `/health` — проверить конфиг и БД
-- `/sources` — список источников
-
-## Режим отладки
-
-```bash
-DEBUG_SCOOP=1 python -m src.main
-```
-
-Берёт по 1 новости из каждого источника и показывает результат за 1-2 минуты.
-
-## Как это работает
-
-1. **Сбор** — RSS, Hacker News API, Reddit API, GitHub Trending (13 источников)
-2. **Фильтр** — только новости за последние 24 часа
-3. **Скоринг** — LLM (Ollama) оценивает новости, эвристика по keywords работает как fallback
-4. **Дайджест** — сортировка по score, группировка по темам, саммари/action на русском
-5. **Отправка** — Telegram-сообщение с Markdown escaping и защитой от повторных ссылок
-
-## Надёжность pipeline
-
-- Один битый источник или malformed payload не должен валить весь сбор.
-- Повторные ссылки фильтруются внутри текущего запуска и между запусками через SQLite `sent_links`.
-- Параллельные запуски `/digest` и scheduler сериализуются lock'ом.
-- `digest_runs` фиксирует результат запуска: `success`, `empty` или `failed`.
-- Тесты используют fake collect / fake LLM / fake Telegram, без реальных сетевых запросов.
+| `OLLAMA_HOST` | Адрес Ollama (по умолчанию http://localhost:11434) |
+| `DIGEST_TIME` | Время отправки дайджеста (по умолчанию 08:30) |
+| `TIMEZONE` | Часовой пояс (по умолчанию Europe/Amsterdam) |
+| `DEBUG_SCOOP` | `1` включает режим отладки |
+| `MAX_ITEM_HOURS` | Максимальный возраст новости в часах (по умолчанию 24) |
 
 ## Структура
 
 ```
 src/
-  main.py         — точка входа
-  config.py       — конфиг из .env
-  models.py       — NewsItem dataclass
-  collect.py      — сбор новостей из источников
-  sources.py      — описание источников
-  llm.py          — LLM скоринг через Ollama
-  digest.py       — форматирование дайджеста
-  telegram.py     — Telegram бот
-  scheduler.py    — ежедневный планировщик
-  storage.py      — SQLite хранилище
-data/             — БД
-tests/            — тесты (pytest)
+  main.py         точка входа
+  config.py       конфиг из .env
+  models.py       NewsItem dataclass
+  collect.py      сбор новостей из источников
+  sources.py      описание источников
+  llm.py          LLM-скоринг через Ollama и эвристический fallback
+  digest.py       форматирование дайджеста
+  telegram.py     Telegram-бот
+  scheduler.py    ежедневный планировщик
+  storage.py      SQLite: sent_links, digest_runs
+tests/            pytest
 ```
 
 ## Источники
@@ -94,4 +78,10 @@ ruff check .
 pytest -q
 ```
 
-Текущий smoke-набор проверяет полный путь collect → score → storage → Telegram на временной SQLite.
+## Стек
+
+Python 3.12, python-telegram-bot, APScheduler, SQLite, Ollama.
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).
