@@ -1,5 +1,7 @@
 # ai-dev-digest
 
+[![CI](https://github.com/daniil4545/ai-dev-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/daniil4545/ai-dev-digest/actions/workflows/ci.yml)
+
 Ежедневный Telegram-дайджест AI/dev-новостей из 13 источников: сбор, скоринг локальной LLM (Ollama), краткая сводка на русском в заданное время.
 
 Пайплайн: RSS, Hacker News API, Reddit API и GitHub Trending собираются в общий список, фильтруются по возрасту, оцениваются LLM, сортируются по score и уходят одним сообщением в Telegram. Пайплайн переживает сбой любого источника и недоступность LLM.
