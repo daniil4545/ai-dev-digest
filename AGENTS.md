@@ -2,48 +2,36 @@
 
 ## Project
 
-AI Dev Digest Bot — Telegram бот, который каждый день в 08:30 собирает новости из AI/dev сферы, фильтрует шум и отправляет краткую сводку.
+AI Dev Digest Bot — Telegram-бот, который каждый день собирает новости из AI/dev
+сферы, фильтрует шум и отправляет краткую сводку. Полное описание, установка и
+список источников — в [README.md](README.md).
 
-Фокус:
-- Claude Code
-- OpenAI Codex / GPT tools
-- opencode
-- AI coding agents
-- MCP
-- self-hosted AI tools
-- практическая автоматизация разработки
+Фокус: Claude Code, OpenAI Codex/GPT tools, opencode, AI coding agents, MCP,
+self-hosted AI tools, практическая автоматизация разработки.
 
 ---
 
 ## Stack
 
-- Python 3.12+
-- python-telegram-bot
-- APScheduler
-- SQLite
-- requests
-- feedparser
-- BeautifulSoup4
-- python-dotenv
-- pytest
-
-LLM:
-- Ollama (local, gemma3:4b)
-- Fallback: эвристический скоринг без LLM
+Python 3.12+, python-telegram-bot, APScheduler (asyncio), SQLite, Ollama
+(gemma3:4b, с эвристическим fallback без LLM). Полный список пакетов —
+`requirements.txt`.
 
 ---
 
 ## Main Flow
 
 ```text
-08:30 scheduler
-→ collect news
-→ normalize items
-→ remove duplicates
-→ score via LLM
-→ build digest
-→ send Telegram message
+DIGEST_TIME (APScheduler)
+→ collect_all()   сбор из всех источников, фильтр по возрасту
+→ score_news()    LLM-скоринг, эвристика при сбое Ollama
+→ storage         дедуп внутри запуска и между запусками (sent_links)
+→ build_digest()  сортировка по score, группировка по категориям
+→ send_digest()   отправка в Telegram, запись в digest_runs
 ```
+
+Тот же путь запускается вручную командой `/digest`; оба пути защищены
+`asyncio.Lock` в `send_digest`, поэтому не пересекаются.
 
 ---
 
@@ -51,157 +39,115 @@ LLM:
 
 ```text
 src/
-  main.py
-  models.py
-  config.py
-  scheduler.py
-  telegram.py
-  collect.py
-  digest.py
-  llm.py
-  storage.py
-  sources.py
-
-data/
-tests/
+  main.py         точка входа: БД, бот, планировщик
+  config.py       конфиг из .env (Config, load_config, get_config)
+  models.py       NewsItem dataclass
+  collect.py      сбор из источников, фильтр по возрасту
+  sources.py      описание источников (name, url, type, category)
+  llm.py          LLM-скоринг через Ollama + эвристический fallback
+  digest.py       форматирование дайджеста
+  telegram.py     Telegram-бот, команды, send_digest
+  scheduler.py    APScheduler, ежедневный job
+  storage.py      SQLite: news_items, digest_runs, sent_links
+data/             SQLite-файл, создаётся автоматически (см. Storage)
+tests/            pytest, по одному файлу на модуль src/
 ```
-
----
-
-## Sources
-
-Initial sources:
-- OpenAI blog
-- Anthropic blog
-- Claude Code changelog
-- opencode releases
-- GitHub Trending
-- Hacker News
-- Reddit:
-  - r/ClaudeAI
-  - r/OpenAI
-  - r/LocalLLaMA
 
 ---
 
 ## News Model
 
-Each item should contain:
-- title
-- url
-- source
-- published_at
-- summary
-- score
-- why_it_matters
-- action
+`NewsItem`: title, url, source, published_at, summary, score,
+why_it_matters, action.
+
+Примечание: поле `why_it_matters` по факту хранит русский summary от LLM
+(prompt в `llm.py` запрашивает `summary`, не `why_it_matters`/`action`) —
+имя поля не меняли, чтобы не трогать storage-схему без необходимости.
 
 ---
 
 ## Scoring
 
-Score news from 0 to 5.
+Score 0..5, в дайджест попадают только `score >= 3`.
 
-Include only:
-```text
-score >= 3
-```
-
-Prioritize:
-- coding agents
-- developer tools
-- workflow automation
-- practical updates
-- new AI tooling
-
-Ignore:
-- generic AI hype
-- marketing news
-- crypto AI spam
+Приоритет: coding agents, developer tools, workflow automation, практические
+обновления, новые AI-инструменты.
+Игнорировать: общий AI-хайп, маркетинг, crypto AI spam.
 
 ---
 
 ## Telegram Digest Format
 
-```text
-🤖 AI Dev Digest
+Реальный формат из `src/digest.py` (`format_digest_message` + `build_digest`):
 
+```text
+*🤖 AI Dev Digest*
 🔥 Main Updates
-- title
-- why it matters
-- action
-- link
+
+1. title
+   summary
+   Action: ...
+   🔗 url
 
 🧰 New Tools
 ...
 
-📌 Try Today
-...
+---
 ```
+
+Категории и заголовки — `CATEGORY_HEADERS`/`CATEGORY_ORDER` в `digest.py`,
+привязаны к `source.category` из `sources.py`. Markdown экранируется
+`_escape_markdown`; `action` выводится только если LLM его вернул.
 
 ---
 
 ## Commands
 
-MVP:
-- /digest
-- /health
-- /sources
+- `/digest` — собрать и отправить дайджест сейчас
+- `/health` — проверить конфиг и БД
+- `/sources` — список источников
 
 ---
 
 ## Rules
 
-- Keep architecture simple
-- No async for MVP
-- No overengineering
-- Use `.env`
-- Never commit secrets
-- Avoid premature abstractions
-- One responsibility per module
-- Prefer readable code over clever code
+- Простая архитектура, без overengineering и преждевременных абстракций
+- Async — основной стиль (`asyncio.Lock`, async-хендлеры, AsyncIOScheduler)
+- Секреты только в `.env`, никогда не коммитить
+- Одна ответственность на модуль
+- Читаемый код важнее «умного»
 
 ---
 
 ## Storage
 
-SQLite tables:
-- news_items
-- digest_runs
-- sent_links
-
-Use hashes to avoid duplicate news.
+SQLite-таблицы: `news_items`, `digest_runs`, `sent_links`.
+Дедуп — по MD5 хешу URL (`Storage._compute_hash`).
+`Storage.__init__` сам создаёт родительскую директорию `db_path`, если её нет
+(кроме `:memory:`) — вручную создавать `data/` не нужно.
 
 ---
 
 ## Environment
 
-```env
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
+Обязательные переменные и переменные с дефолтами — таблица в README
+(`.env.example` содержит актуальный набор ключей).
 
-OLLAMA_MODEL=gemma3:4b
-OLLAMA_HOST=http://localhost:11434
+---
 
-DIGEST_TIME=08:30
-TIMEZONE=Europe/Amsterdam
-```
+## Lint
+
+Правила ruff зафиксированы в `pyproject.toml`: `E, F, I, UP`.
+`BLE001` (flake8-blind-except) осознанно исключён — широкий
+`except Exception` в collect.py/llm.py/scheduler.py/telegram.py изолирует
+сбой одного источника/LLM/Telegram от остального пайплайна.
 
 ---
 
 ## MVP Goals
 
-1. Collect RSS feeds
-2. Generate digest
-3. Send Telegram message
-4. Prevent duplicates
-5. Run every morning automatically
+Выполнено: сбор RSS/API-источников, генерация и отправка дайджеста,
+дедуп, ежедневный запуск по расписанию (см. `docs/TASKS.md` по milestones).
 
-Do not implement yet:
-- web UI
-- multi-user support
-- vector DB
-- RAG
-- browser automation
-- subscriptions
-- complex admin panel
+Не в скоупе: web UI, multi-user, vector DB, RAG, browser automation,
+подписки, admin panel.
