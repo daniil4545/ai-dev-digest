@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/daniil4545/ai-dev-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/daniil4545/ai-dev-digest/actions/workflows/ci.yml)
 
-Ежедневный Telegram-дайджест AI/dev-новостей из 13 источников: сбор, скоринг локальной LLM (Ollama), краткая сводка на русском в заданное время.
+Дайджест AI и dev-новостей из 16 источников: Python собирает свежие новости и убирает уже показанные, Claude Code отбирает до 10 главных, читает оригиналы и пишет разбор на русском в markdown-файл.
 
-Пайплайн: RSS, Hacker News API, Reddit API и GitHub Trending собираются в общий список, фильтруются по возрасту, оцениваются LLM, сортируются по score и уходят одним сообщением в Telegram. Пайплайн переживает сбой любого источника и недоступность LLM.
+Поток: `/digest` в сессии Claude Code, `collect` (кандидаты в JSON), отбор, чтение оригиналов, файл `digests/YYYY-MM-DD.md`, `mark` (ссылки файла больше не попадут в кандидаты).
 
 ## Быстрый старт
 
@@ -13,64 +13,48 @@ git clone https://github.com/daniil4545/ai-dev-digest.git
 cd ai-dev-digest
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # заполнить TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID
-python -m src.main
+claude            # в сессии: /digest
 ```
 
-Режим отладки, результат за 1-2 минуты (по 1 новости с источника):
+Без Claude Code сборщик работает как CLI:
 
 ```bash
-DEBUG_SCOOP=1 python -m src.main
+python -m src.main collect                      # кандидаты в JSON в stdout, логи в stderr
+python -m src.main mark digests/2026-09-30.md   # отметить ссылки дайджеста
 ```
 
 ## Инженерные решения
 
-- **Изоляция сбоев источников.** Каждый источник опрашивается независимо; сетевой сбой или malformed payload логируется и не валит сбор остальных 12.
-- **Эвристический fallback без LLM.** При недоступности Ollama скоринг деградирует до keyword-эвристики; дайджест выходит в любом случае.
-- **Дедуп между запусками.** Отправленные ссылки фиксируются в SQLite-таблице `sent_links` (`INSERT OR IGNORE`); повторы фильтруются и внутри одного запуска, и между запусками.
-- **Сериализация запусков.** Ручной `/digest` и запуск по расписанию не пересекаются: отправка защищена asyncio-lock.
-- **Журнал запусков.** Каждый запуск пишется в `digest_runs` со статусом `success`, `empty` или `failed`; это основа команды `/health`.
-- **Тесты без сети.** Полный путь collect, score, storage, Telegram проверяется на fake-реализациях и временной SQLite.
-
-## Команды
-
-- `/digest` собрать и отправить дайджест сейчас
-- `/health` проверить конфиг и БД
-- `/sources` список источников
+- **Изоляция сбоев источников.** Каждый источник опрашивается независимо; сетевой сбой или битая лента логируется и не валит сбор остальных.
+- **Дедуп между запусками.** Ссылки из записанного дайджеста фиксируются в SQLite-таблице `sent_links` (`INSERT OR IGNORE`). Новость, которую не выбрали, может попасть в следующий дайджест, пока моложе окна.
+- **Нормализация ссылок.** Без `utm_*` и хвостового `/`: одна статья из блога и с HN - один кандидат.
+- **Решения в коде, текст у модели.** Что уже показано, решает детерминированный `mark` по ссылкам файла, а не модель.
+- **Тесты без сети.** Сбор, дедуп и CLI проверяются на фейковых ответах и временной SQLite.
 
 ## Настройка `.env`
 
 | Переменная | Описание |
 |---|---|
-| `TELEGRAM_BOT_TOKEN` | Токен бота от @BotFather |
-| `TELEGRAM_CHAT_ID` | ID чата (узнать через @userinfobot) |
-| `OLLAMA_MODEL` | Модель Ollama (по умолчанию gemma3:4b) |
-| `OLLAMA_HOST` | Адрес Ollama (по умолчанию http://localhost:11434) |
-| `DIGEST_TIME` | Время отправки дайджеста (по умолчанию 08:30) |
-| `TIMEZONE` | Часовой пояс (по умолчанию Europe/Amsterdam) |
-| `DEBUG_SCOOP` | `1` включает режим отладки |
-| `MAX_ITEM_HOURS` | Максимальный возраст новости в часах (по умолчанию 24) |
+| `MAX_ITEM_HOURS` | Окно свежести новостей в часах (по умолчанию 72) |
 
 ## Структура
 
 ```
+.claude/skills/digest/  скилл /digest: отбор, разбор, формат файла
 src/
-  main.py         точка входа
-  config.py       конфиг из .env
-  models.py       NewsItem dataclass
-  collect.py      сбор новостей из источников
-  sources.py      описание источников
-  llm.py          LLM-скоринг через Ollama и эвристический fallback
-  digest.py       форматирование дайджеста
-  telegram.py     Telegram-бот
-  scheduler.py    ежедневный планировщик
-  storage.py      SQLite: sent_links, digest_runs
-tests/            pytest
+  main.py       CLI: collect, mark
+  collect.py    сбор, нормализация ссылок, фильтр по возрасту
+  sources.py    список источников
+  storage.py    SQLite: sent_links
+  config.py     конфиг из .env
+  models.py     NewsItem
+tests/          pytest
+digests/        дайджесты, в git не попадают
 ```
 
 ## Источники
 
-OpenAI Blog, Anthropic Blog, Cursor Blog, Google DeepMind, Groq News, Stability AI, Claude Code Changelog, OpenCode Releases, GitHub Trending, Hacker News, Reddit (r/ClaudeAI, r/OpenAI, r/LocalLLaMA).
+OpenAI, Anthropic, Anthropic Engineering, Cursor, Google DeepMind, Google AI, Hugging Face, Simon Willison, Latent Space, Andrej Karpathy (два блога и YouTube), Habr (хаб AI), Reddit (r/ClaudeAI, r/OpenAI, r/LocalLLaMA одной лентой), Hacker News, GitHub Trending. Проверка каждой ленты - [docs/plans/claude-digest-sources.md](docs/plans/claude-digest-sources.md).
 
 ## Тесты
 
@@ -82,7 +66,7 @@ pytest -q
 
 ## Стек
 
-Python 3.12, python-telegram-bot, APScheduler, SQLite, Ollama.
+Python 3.12, requests, feedparser, BeautifulSoup, SQLite, Claude Code.
 
 ## Лицензия
 
