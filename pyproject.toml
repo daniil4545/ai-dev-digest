@@ -4,8 +4,6 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 # BLE001 (flake8-blind-except) is explicitly excluded, not just unselected:
-# broad except Exception blocks in collect.py/llm.py/scheduler.py/telegram.py
-# isolate failures of a single source/LLM/Telegram call so the rest of the
-# pipeline keeps running, as documented in README under "Инженерные решения".
-# This is a deliberate design decision, not an oversight.
+# broad except Exception blocks in collect.py isolate the failure of a single
+# source so the other sources are still collected.
 ignore = ["BLE001"]

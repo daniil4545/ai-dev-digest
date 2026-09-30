@@ -2,6 +2,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
 import requests
@@ -30,6 +31,18 @@ def _truncate(text: str, max_len: int = 500) -> str:
     if len(text) <= max_len:
         return text
     return text[:max_len].rsplit(" ", 1)[0] + "..."
+
+
+def normalize_url(url: str) -> str:
+    """Lowercase the host, drop utm_* and the trailing slash: one article, one URL."""
+    parts = urlsplit(url.strip())
+    query = parts.query
+    if "utm_" in query:
+        # Rebuild only when needed: re-encoding could change other parameters
+        pairs = parse_qsl(query, keep_blank_values=True)
+        query = urlencode([(k, v) for k, v in pairs if not k.startswith("utm_")])
+    path = parts.path.rstrip("/")
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, query, ""))
 
 
 def _filter_recent(items: list[NewsItem], hours: int = 24) -> list[NewsItem]:
@@ -75,7 +88,11 @@ def fetch_rss(url: str) -> list[NewsItem]:
         title = getattr(entry, "title", "")
         link = getattr(entry, "link", "")
         summary = getattr(entry, "summary", getattr(entry, "description", ""))
-        published = _parse_date(entry.get("published_parsed"))
+        summary = BeautifulSoup(summary, "html.parser").get_text(" ", strip=True)
+        # Atom feeds may carry only <updated>; without it the entry is always "now"
+        published = _parse_date(
+            entry.get("published_parsed") or entry.get("updated_parsed")
+        )
         items.append(
             NewsItem(
                 title=title,
@@ -133,48 +150,6 @@ def fetch_hn_top() -> list[NewsItem]:
     return items
 
 
-def fetch_reddit_hot(url: str) -> list[NewsItem]:
-    try:
-        headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError) as e:
-        logger.warning("Failed to fetch Reddit %s: %s", url, e)
-        return []
-    if not isinstance(data, dict):
-        logger.warning("Failed to parse Reddit %s: root payload is not an object", url)
-        return []
-
-    items: list[NewsItem] = []
-    for child in data.get("data", {}).get("children", []):
-        try:
-            post = child.get("data", {})
-            if not isinstance(post, dict):
-                continue
-            title = str(post.get("title", ""))
-            post_url = str(post.get("url", ""))
-            if not post_url or post_url.startswith("https://www.reddit.com/r/"):
-                post_url = f"https://www.reddit.com{post.get('permalink', '')}"
-            score = float(post.get("score", 0))
-            created = post.get("created_utc", 0)
-            published_at = datetime.fromtimestamp(created, tz=UTC).isoformat()
-            items.append(
-                NewsItem(
-                    title=title,
-                    url=post_url,
-                    source="",
-                    published_at=published_at,
-                    summary=_truncate(post.get("selftext", title)),
-                    score=score,
-                )
-            )
-        except (AttributeError, TypeError, ValueError) as e:
-            logger.warning("Skipping malformed Reddit child in %s: %s", url, e)
-            continue
-    return items
-
-
 def fetch_github_trending(url: str) -> list[NewsItem]:
     try:
         headers = {"User-Agent": "ai-dev-digest-bot/1.0"}
@@ -196,7 +171,7 @@ def fetch_github_trending(url: str) -> list[NewsItem]:
         repo_path = str(a.get("href", ""))
         if repo_path.startswith("/"):
             repo_path = f"https://github.com{repo_path}"
-        repo_name = a.text.strip().replace(" ", "")
+        repo_name = "".join(a.text.split())
 
         desc_el = article.select_one("p")
         description = desc_el.text.strip() if desc_el else ""
@@ -227,12 +202,11 @@ def fetch_github_trending(url: str) -> list[NewsItem]:
 FETCH_MAP: dict[str, Callable[..., list[NewsItem]]] = {
     "rss": fetch_rss,
     "hn_api": fetch_hn_top,
-    "reddit_api": fetch_reddit_hot,
     "github_trending": fetch_github_trending,
 }
 
 
-def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> list[NewsItem]:
+def collect_all(max_item_hours: int = 72) -> list[NewsItem]:
     all_items: list[NewsItem] = []
     for source in SOURCES:
         fetcher = FETCH_MAP.get(source.type)
@@ -245,16 +219,11 @@ def collect_all(debug_scoop: bool = False, max_item_hours: int = 24) -> list[New
             else:
                 items = fetcher(source.url)
 
-            limit = 1 if debug_scoop else MAX_ITEMS_PER_SOURCE
-            items = items[:limit]
+            items = items[:MAX_ITEMS_PER_SOURCE]
             for item in items:
                 item.source = source.name
-            logger.info(
-                "Collected %d items from %s%s",
-                len(items),
-                source.name,
-                " (debug scoop)" if debug_scoop else "",
-            )
+                item.url = normalize_url(item.url)
+            logger.info("Collected %d items from %s", len(items), source.name)
             all_items.extend(items)
         except requests.RequestException as e:
             logger.warning("Failed to fetch %s: %s", source.name, e)

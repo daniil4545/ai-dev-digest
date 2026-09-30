@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+- Дайджест пишет Claude Code: скилл `/digest` отбирает до 10 новостей, читает оригиналы и пишет разбор в `digests/YYYY-MM-DD.md`
+- `src/main.py` - CLI `collect` (кандидаты в JSON без показанных ссылок) и `mark` (ссылки дайджеста в `sent_links`)
+- Источники: добавлены Habr, Google AI, официальная лента DeepMind, Hugging Face, Anthropic Engineering, Simon Willison, Latent Space, Andrej Karpathy; Reddit одной RSS-лентой; убраны Groq, Stability, релизы Claude Code и OpenCode
+- Ссылки нормализуются (без `utm_*` и хвостового `/`), дата Atom берётся из `updated`, summary без HTML, заголовки GitHub Trending без переводов строк
+- `MAX_ITEM_HOURS` по умолчанию 72
+
+### Removed
+- Telegram-бот, APScheduler, Ollama-скоринг, форматтер Telegram, `DEBUG_SCOOP`, таблицы `news_items` и `digest_runs` в новых БД
+
 ### Added
 - Pipeline smoke/e2e tests with fake collect, fake LLM, fake Telegram and temp SQLite
 - Edge-case tests for empty sources, malformed HN/Reddit payloads, duplicate links, empty scoring results, Telegram send failures and concurrent digest runs

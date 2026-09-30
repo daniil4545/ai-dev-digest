@@ -1,6 +1,7 @@
 import time
 from datetime import UTC, datetime
 
+import pytest
 import requests
 
 from src.collect import (
@@ -10,8 +11,8 @@ from src.collect import (
     collect_all,
     fetch_github_trending,
     fetch_hn_top,
-    fetch_reddit_hot,
     fetch_rss,
+    normalize_url,
 )
 from src.models import NewsItem
 from src.sources import SOURCES
@@ -196,126 +197,6 @@ class TestFetchHN:
         assert len(items) == 0
 
 
-class TestFetchReddit:
-    def test_fetch_reddit_hot(self, mocker) -> None:
-        mock_get = mocker.patch("src.collect.requests.get")
-
-        resp = mocker.Mock()
-        resp.json.return_value = {
-            "data": {
-                "children": [
-                    {
-                        "data": {
-                            "title": "Reddit Post",
-                            "url": "https://example.com/reddit",
-                            "score": 100,
-                            "created_utc": 1700000000,
-                        }
-                    }
-                ]
-            }
-        }
-        resp.raise_for_status.return_value = None
-        mock_get.return_value = resp
-
-        items = fetch_reddit_hot("https://www.reddit.com/r/test/hot.json")
-        assert len(items) == 1
-        assert items[0].title == "Reddit Post"
-        assert items[0].score == 100.0
-
-    def test_fetch_reddit_self_post(self, mocker) -> None:
-        mock_get = mocker.patch("src.collect.requests.get")
-
-        resp = mocker.Mock()
-        resp.json.return_value = {
-            "data": {
-                "children": [
-                    {
-                        "data": {
-                            "title": "Self Post",
-                            "url": "https://www.reddit.com/r/test/comments/abc/self_post/",
-                            "permalink": "/r/test/comments/abc/self_post/",
-                            "score": 50,
-                            "created_utc": 1700000000,
-                            "selftext": "Self text content",
-                        }
-                    }
-                ]
-            }
-        }
-        resp.raise_for_status.return_value = None
-        mock_get.return_value = resp
-
-        items = fetch_reddit_hot("https://www.reddit.com/r/test/hot.json")
-        assert len(items) == 1
-        assert "reddit.com" in items[0].url
-
-    def test_fetch_reddit_no_url(self, mocker) -> None:
-        mock_get = mocker.patch("src.collect.requests.get")
-
-        resp = mocker.Mock()
-        resp.json.return_value = {
-            "data": {
-                "children": [
-                    {
-                        "data": {
-                            "title": "No URL Post",
-                            "url": "",
-                            "permalink": "/r/test/comments/xyz/no_url/",
-                            "score": 10,
-                            "created_utc": 1700000000,
-                        }
-                    }
-                ]
-            }
-        }
-        resp.raise_for_status.return_value = None
-        mock_get.return_value = resp
-
-        items = fetch_reddit_hot("https://www.reddit.com/r/test/hot.json")
-        assert len(items) == 1
-        assert "reddit.com" in items[0].url
-
-    def test_fetch_reddit_skips_bad_children(self, mocker) -> None:
-        mock_get = mocker.patch("src.collect.requests.get")
-
-        resp = mocker.Mock()
-        resp.json.return_value = {
-            "data": {
-                "children": [
-                    None,
-                    {"data": None},
-                    {"data": {"title": "Missing score", "score": "not-a-number"}},
-                    {
-                        "data": {
-                            "title": "Good Post",
-                            "url": "https://example.com/good",
-                            "score": 12,
-                            "created_utc": 1700000000,
-                        }
-                    },
-                ]
-            }
-        }
-        resp.raise_for_status.return_value = None
-        mock_get.return_value = resp
-
-        items = fetch_reddit_hot("https://www.reddit.com/r/test/hot.json")
-
-        assert len(items) == 1
-        assert items[0].title == "Good Post"
-
-    def test_fetch_reddit_bad_root_payload(self, mocker) -> None:
-        mock_get = mocker.patch("src.collect.requests.get")
-
-        resp = mocker.Mock()
-        resp.json.return_value = ["not", "an", "object"]
-        resp.raise_for_status.return_value = None
-        mock_get.return_value = resp
-
-        assert fetch_reddit_hot("https://www.reddit.com/r/test/hot.json") == []
-
-
 class TestFetchGitHubTrending:
     def test_fetch_github_trending(self, mocker) -> None:
         mock_get = mocker.patch("src.collect.requests.get")
@@ -397,7 +278,6 @@ class TestCollectAll:
 
         mock_fetch_rss = mocker.Mock(return_value=[rss_item])
         mock_fetch_hn = mocker.Mock(return_value=[hn_item])
-        mock_fetch_reddit = mocker.Mock(return_value=[])
         mock_fetch_gh = mocker.Mock(return_value=[])
 
         mocker.patch.dict(
@@ -405,7 +285,6 @@ class TestCollectAll:
             {
                 "rss": mock_fetch_rss,
                 "hn_api": mock_fetch_hn,
-                "reddit_api": mock_fetch_reddit,
                 "github_trending": mock_fetch_gh,
             },
             clear=True,
@@ -416,39 +295,14 @@ class TestCollectAll:
 
         rss_source_count = sum(1 for s in SOURCES if s.type == "rss")
         hn_source_count = sum(1 for s in SOURCES if s.type == "hn_api")
-        reddit_source_count = sum(1 for s in SOURCES if s.type == "reddit_api")
         gh_source_count = sum(1 for s in SOURCES if s.type == "github_trending")
 
         assert mock_fetch_rss.call_count == rss_source_count
         assert mock_fetch_hn.call_count == hn_source_count
-        assert mock_fetch_reddit.call_count == reddit_source_count
         assert mock_fetch_gh.call_count == gh_source_count
 
         assert len(items) == rss_source_count + hn_source_count
         for item in items:
-            assert item.source != ""
-
-    def test_collect_all_debug_scoop(self, mocker) -> None:
-        now = datetime.now(UTC).isoformat()
-        items_multi = [
-            NewsItem(
-                title=f"Item {i}",
-                url=f"https://example.com/{i}",
-                source="",
-                published_at=now,
-                summary="",
-            )
-            for i in range(5)
-        ]
-
-        mock_fetch = mocker.Mock(return_value=list(items_multi))
-        mocker.patch.dict("src.collect.FETCH_MAP", {"rss": mock_fetch}, clear=True)
-        mocker.patch("src.collect._filter_recent", side_effect=lambda x, **kw: x)
-
-        result = collect_all(debug_scoop=True)
-        rss_count = sum(1 for s in SOURCES if s.type == "rss")
-        assert len(result) == rss_count
-        for item in result:
             assert item.source != ""
 
 
@@ -503,7 +357,6 @@ class TestSources:
             assert source.type in (
                 "rss",
                 "hn_api",
-                "reddit_api",
                 "github_trending",
             ), f"Source {source.name} has unknown type: {source.type}"
 
@@ -513,3 +366,87 @@ class TestSources:
     def test_source_name_unique(self) -> None:
         names = [s.name for s in SOURCES]
         assert len(names) == len(set(names)), f"Duplicate names: {names}"
+
+
+class TestNormalizeUrl:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("https://openai.com/index/dots/", "https://openai.com/index/dots"),
+            ("https://openai.com/index/dots", "https://openai.com/index/dots"),
+            (
+                "https://habr.com/ru/articles/1/?utm_campaign=1&utm_source=habrahabr",
+                "https://habr.com/ru/articles/1",
+            ),
+            (
+                "https://news.ycombinator.com/item?id=1&utm_medium=rss",
+                "https://news.ycombinator.com/item?id=1",
+            ),
+            ("https://example.com/", "https://example.com"),
+            ("HTTPS://Example.COM/Path", "https://example.com/Path"),
+        ],
+    )
+    def test_normalize_url(self, raw: str, expected: str) -> None:
+        assert normalize_url(raw) == expected
+
+
+ATOM_FEED = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Releases</title>
+  <entry>
+    <title>Atom entry</title>
+    <link href="https://example.com/entry"/>
+    <updated>2026-09-29T10:00:00Z</updated>
+    <content type="html">&lt;p&gt;First &lt;b&gt;bold&lt;/b&gt; line&lt;/p&gt;</content>
+  </entry>
+</feed>
+"""
+
+
+class TestFetchAtom:
+    def test_atom_entry_uses_updated_date_and_plain_summary(self, mocker) -> None:
+        response = mocker.Mock(text=ATOM_FEED)
+        mocker.patch("src.collect.requests.get", return_value=response)
+
+        items = fetch_rss("https://example.com/feed.atom")
+
+        assert len(items) == 1
+        assert items[0].published_at == "2026-09-29T10:00:00+00:00"
+        assert items[0].summary == "First bold line"
+
+
+class TestTrendingTitle:
+    def test_title_without_line_breaks(self, mocker) -> None:
+        html = """
+        <article class="Box-row">
+          <h2><a href="/NVIDIA/OpenShell">NVIDIA /
+
+          OpenShell</a></h2>
+        </article>
+        """
+        response = mocker.Mock(text=html)
+        mocker.patch("src.collect.requests.get", return_value=response)
+
+        items = fetch_github_trending("https://github.com/trending")
+
+        assert items[0].title == "NVIDIA/OpenShell"
+
+
+class TestCollectAllNormalizes:
+    def test_urls_are_normalized(self, mocker) -> None:
+        item = NewsItem(
+            title="Post",
+            url="https://habr.com/ru/articles/1/?utm_source=habrahabr",
+            source="",
+            published_at=datetime.now(UTC).isoformat(),
+            summary="",
+        )
+        rss_sources = [s for s in SOURCES if s.type == "rss"]
+        mocker.patch("src.collect.SOURCES", rss_sources[:1])
+        mocker.patch.dict(
+            "src.collect.FETCH_MAP", {"rss": lambda url: [item]}, clear=True
+        )
+
+        items = collect_all()
+
+        assert items[0].url == "https://habr.com/ru/articles/1"

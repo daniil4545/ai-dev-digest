@@ -51,27 +51,9 @@
       Добавить smoke e2e с fake collect / fake LLM / fake Telegram без реальных сетевых запросов.
       Проверка: `ruff check .` и `pytest -q` — зелёные.
 
-- [~] **M8: Information Quality Loop**
-      Зафиксировать контракт качества информации: какие поля заполняет collector, какие LLM,
-      какие digest formatter. Доработать prompt для LLM:
-      - score 0..5 — сделано (см. CHANGELOG);
-      - короткий русский title — сделано;
-      - summary на русском вместо why_it_matters/action — сделано (осознанное отклонение
-        от исходного контракта, см. AGENTS.md News Model);
-      - category — используется category источника, отдельного LLM-поля нет;
-      - причина отсева для debug — не реализовано.
-      Golden fixtures для 5-10 новостей и debug/dry-run режим (raw collected/scored items
-      без отправки в Telegram) — перенесены за рамки текущего этапа (новая функциональность,
-      не входит в доведение существующего до рабочего состояния). M8 остаётся в работе, не
-      считать завершённым до их реализации.
+- [-] **M8-M10** (качество LLM-скоринга, формат Telegram, runbook) отменены: Telegram-бот и Ollama-скоринг удалены, дайджест пишет Claude Code.
 
-- [ ] **M9: Telegram Digest Format**
-      Доработать формат сообщения под реальное ежедневное чтение:
-      короткий daily digest, debug/full digest, секция `Try Today`,
-      устойчивый Markdown escaping, лимит длины Telegram-сообщения.
-      Добавить snapshot/golden tests на итоговый текст дайджеста.
-      Проверка: тесты подтверждают структуру, escaping, категории, action и поведение на длинном digest.
-
-- [ ] **M10: README / Runbook**
-      Установка, `.env`, запуск, `/health`, dry-run, пример дайджеста,
-      как читать debug output / БД и что делать при сбоях Telegram, Ollama или источников.
+- [x] **M11: Дайджест через Claude Code**
+      Спека: [plans/claude-digest.md](plans/claude-digest.md), источники: [plans/claude-digest-sources.md](plans/claude-digest-sources.md).
+      Этап 1 (сборщик и CLI `collect`/`mark`, удаление бота) и этап 2 (скилл `/digest`, документы) сделаны; первый дайджест 30.09.
+      Проверка: `pytest -q`, `ruff check .`, `ruff format --check .`; прогон `/digest` и повторный прогон без повторов.

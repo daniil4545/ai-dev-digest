@@ -8,6 +8,4 @@ class NewsItem:
     source: str
     published_at: str
     summary: str
-    score: float = 0.0
-    why_it_matters: str = ""
-    action: str = ""
+    score: float = 0.0  # popularity at the source: HN points, GitHub stars; 0 for RSS
